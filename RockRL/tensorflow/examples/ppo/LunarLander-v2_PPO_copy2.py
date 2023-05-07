@@ -24,9 +24,15 @@ def actor_model(input_shape, action_space):
     # # X = LeakyReLU(alpha=0.1)(X)
     # X = Dense(64, activation='relu')(X)
     # # X = LeakyReLU(alpha=0.1)(X)
-    X = Dense(512, activation="relu", kernel_initializer=tf.random_normal_initializer(stddev=0.01))(X_input)
-    X = Dense(256, activation="relu", kernel_initializer=tf.random_normal_initializer(stddev=0.01))(X)
-    X = Dense(64, activation="relu", kernel_initializer=tf.random_normal_initializer(stddev=0.01))(X)
+    X = Dense(512)(X_input)
+    X = LeakyReLU(alpha=0.1)(X)
+    X = Dense(256)(X)
+    X = LeakyReLU(alpha=0.1)(X)
+    X = Dense(64)(X)
+    X = LeakyReLU(alpha=0.1)(X)
+    # X = Dense(512, activation="relu", kernel_initializer=tf.random_normal_initializer(stddev=0.01))(X_input)
+    # X = Dense(256, activation="relu", kernel_initializer=tf.random_normal_initializer(stddev=0.01))(X)
+    # X = Dense(64, activation="relu", kernel_initializer=tf.random_normal_initializer(stddev=0.01))(X)
     output = Dense(action_space, activation="softmax")(X)
 
     model = Model(inputs = X_input, outputs = output)
@@ -34,15 +40,15 @@ def actor_model(input_shape, action_space):
 
 def critic_model(input_shape):
     X_input = Input(input_shape)
-    # X = Dense(512, activation='relu')(X_input)
-    # # X = LeakyReLU(alpha=0.1)(X)
-    # X = Dense(256, activation='relu')(X)
-    # # X = LeakyReLU(alpha=0.1)(X)
-    # X = Dense(64, activation='relu')(X)
-    # # X = LeakyReLU(alpha=0.1)(X)
-    X = Dense(512, activation="relu", kernel_initializer='he_uniform')(X_input)
-    X = Dense(256, activation="relu", kernel_initializer='he_uniform')(X)
-    X = Dense(64, activation="relu", kernel_initializer='he_uniform')(X)
+    X = Dense(512)(X_input)
+    X = LeakyReLU(alpha=0.1)(X)
+    X = Dense(256)(X)
+    X = LeakyReLU(alpha=0.1)(X)
+    X = Dense(64)(X)
+    X = LeakyReLU(alpha=0.1)(X)
+    # X = Dense(512, activation="relu", kernel_initializer='he_uniform')(X_input)
+    # X = Dense(256, activation="relu", kernel_initializer='he_uniform')(X)
+    # X = Dense(64, activation="relu", kernel_initializer='he_uniform')(X)
     value = Dense(1, activation=None)(X)
 
     model = Model(inputs = X_input, outputs = value)
@@ -83,7 +89,11 @@ if __name__ == "__main__":
     #     actor = actor_model(input_shape, action_space),
     #     critic = critic_model(input_shape)
     # )
-    # agent.compile(run_eagerly=False)
+    # agent.compile(
+    #     actor_optimizer=tf.keras.optimizers.Adam(learning_rate=0.00005),
+    #     critic_optimizer=tf.keras.optimizers.Adam(learning_rate=0.00005),
+    #     run_eagerly=False
+    #     )
 
     # memory = Memory(num_envs=num_envs)
     # meanAverage = MeanAverage()

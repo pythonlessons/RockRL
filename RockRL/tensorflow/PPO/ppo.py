@@ -39,16 +39,25 @@ class PPOAgent(tf.keras.models.Model):
         loss = self.c1 * K.mean((y_pred - target) ** 2)
         return loss
     
+    def logprob_dist(self, probs, actions):
+        oh_actions = K.one_hot(actions, probs.shape[-1])
+        probs = K.sum(oh_actions * probs, axis=1)
+        log_probs = K.log(probs + 1e-10)
+
+        return log_probs
+    
     def actor_loss(self, y_pred, advantages, predictions, actions):
         # Defined in https://arxiv.org/abs/1707.06347
 
-        dist = tfp.distributions.Categorical(y_pred)
-        prob = dist.log_prob(actions)
+        log_prob = self.logprob_dist(y_pred, actions)
+        log_old_prob = self.logprob_dist(predictions, actions)
+        # dist = tfp.distributions.Categorical(y_pred)
+        # log_prob = dist.log_prob(actions)
 
-        dist_old = tfp.distributions.Categorical(predictions)
-        old_prob = dist_old.log_prob(actions)
+        # dist_old = tfp.distributions.Categorical(predictions)
+        # log_old_prob = dist_old.log_prob(actions)
 
-        ratio = K.exp(prob - old_prob)
+        ratio = K.exp(log_prob - log_old_prob)
 
         advantages = tf.squeeze(advantages)
 
@@ -75,12 +84,6 @@ class PPOAgent(tf.keras.models.Model):
         loss = -K.mean(K.minimum(p1, p2))
 
         return loss
-
-        entropy = self.c2 * K.mean(-(y_pred * K.log(y_pred + 1e-10)))
-        
-        total_loss = loss - entropy
-
-        return total_loss
     
     def act(self, state):
         state_dim = state.ndim
