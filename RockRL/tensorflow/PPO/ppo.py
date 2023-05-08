@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from keras import backend as K
+import time
 
 # import tfp
 import tensorflow_probability as tfp
@@ -46,7 +47,7 @@ class PPOAgent(tf.keras.models.Model):
         return loss
     
     def logprob_dist(self, probs, actions):
-        oh_actions = K.one_hot(tf.cast(actions, tf.int32), probs.shape[-1])
+        oh_actions = K.one_hot(tf.cast(actions, tf.uint8), probs.shape[-1])
         probs = K.sum(oh_actions * probs, axis=1)
         log_probs = K.log(probs + 1e-10)
 
@@ -122,7 +123,8 @@ class PPOAgent(tf.keras.models.Model):
         if normalize and gaes.shape[0] > 1:
             gaes = (gaes - K.mean(gaes)) / (K.std(gaes) + 1e-8)
         
-        return tf.expand_dims(gaes, axis=1), tf.expand_dims(target, axis=1)
+        return gaes, target
+        # return tf.expand_dims(gaes, axis=1), tf.expand_dims(target, axis=1)
 
     def get_gaes(self, rewards, dones, values, next_values, gamma = 0.99, lamda = 0.9, normalize=True):
         values = np.array(values, dtype=np.float32)
@@ -143,6 +145,7 @@ class PPOAgent(tf.keras.models.Model):
         # return np.vstack(gaes), np.vstack(target)
 
     # TODO use this for training
+    @tf.function
     def predict_chunks(self, model, data, batch_size=64, training=True):
         predictions = []
         for i in range(0, data.shape[0], batch_size):
@@ -153,8 +156,26 @@ class PPOAgent(tf.keras.models.Model):
 
     def train_step_wrapper(func):
         # run function in batches
+        @tf.function
         def wrapper(self, data):
-            data = [tf.convert_to_tensor(d, dtype=tf.float32) for d in data]
+            # data = [tf.convert_to_tensor(d, dtype=tf.float32) for d in data]
+
+            states, old_probs, actions, rewards, dones, next_state = data
+
+            # t1 = time.time()
+            next_state = tf.expand_dims(next_state, axis=0)
+            combined_states = tf.concat([states, next_state], axis=0)
+
+            values_pred = self.predict_chunks(self.critic, combined_states, batch_size=64, training=False)
+            values, next_values = tf.squeeze(values_pred[:-1]), tf.squeeze(values_pred[1:])
+
+
+            advantages, target = self.get_gaes_tf(rewards, dones, values, next_values)
+            # print(f"get_gaes_tf time: {time.time() - t1}")
+
+            data = (states, advantages, old_probs, actions, target)
+
+
             # states, advantages, old_probs, actions, target, values = data
 
             # states = tf.convert_to_tensor(states, dtype=tf.float32)
@@ -175,7 +196,7 @@ class PPOAgent(tf.keras.models.Model):
     def train_step(self, data):
         # states, old_probs, actions, rewards, dones, next_state = data # [0]
         # states, advantages, old_probs, actions, target, rewards, dones, values, next_values = data[0]
-        states, advantages, old_probs, actions, target, values = data # [0]
+        states, advantages, old_probs, actions, target = data # [0]
 
         # # numpy to tensor
         # # states = tf.convert_to_tensor(states, dtype=tf.float32)
@@ -227,16 +248,18 @@ class PPOAgent(tf.keras.models.Model):
         all_states = np.array(states + [next_state])
         states = np.array(states)
         actions = np.array(actions)
+
+        # # # # Get Critic network predictions 
+        # t1 = time.time()
+        # # all_values = self.critic(all_states, training=False).numpy().squeeze()
+        # all_values = self.predict_chunks(self.critic, all_states, batch_size=64, training=False).numpy().squeeze()
+        # values, next_values = all_values[:-1], all_values[1:]
+
+        # # Compute discounted rewards and advantages
+        # advantages, target = self.get_gaes(rewards, dones, values, next_values)
+        # print("get_gaes time: ", time.time() - t1)
+
         for _ in range(self.train_epochs):
-
-            # # Get Critic network predictions 
-            all_values = self.critic(all_states, training=False).numpy().squeeze()
-            values, next_values = all_values[:-1], all_values[1:]
-
-            # # Compute discounted rewards and advantages
-            advantages, target = self.get_gaes(rewards, dones, values, next_values)
-            # # advantages, target = self.get_gaes_tf(rewards, dones, values, next_values)
-
 
             # rewards = np.array(rewards)
             # dones = np.array(dones)
@@ -245,6 +268,7 @@ class PPOAgent(tf.keras.models.Model):
             # for _ in range(self.train_epochs):
             #     self.train_step((states, advantages, old_probs, actions, target, rewards, dones, values, next_values))
 
-            self.train_step((states, advantages, old_probs, actions, target, values))
+            # self.train_step((states, advantages, old_probs, actions, target, values))
+            self.train_step((states, old_probs, actions, rewards, dones, next_state))
             # self.fit(x=(states, advantages, old_probs, actions, target, values), epochs=1, shuffle=False, verbose=False, batch_size=self.batch_size)
             # self.fit(x=(states, advantages, old_probs, actions, target, rewards, dones, values, next_values), epochs=self.train_epochs, shuffle=False, verbose=False, batch_size=self.batch_size)
