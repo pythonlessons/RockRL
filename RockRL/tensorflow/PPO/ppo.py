@@ -4,6 +4,8 @@ import numpy as np
 import tensorflow as tf
 from keras import backend as K
 
+import tensorflow_probability as tfp
+
 
 class PPOAgent:
     def __init__(
@@ -53,9 +55,6 @@ class PPOAgent:
     #     self.actor_optimizer = actor_optimizer
     #     self.critic_optimizer = critic_optimizer
 
-    def entropy(self, probs):
-        return -K.mean(probs * K.log(probs + 1e-10)) * self.c2
-
     def critic_loss(self, y_pred, target):
         y_pred = tf.squeeze(y_pred)
         target = tf.squeeze(target)
@@ -67,17 +66,43 @@ class PPOAgent:
         probs = K.sum(oh_actions * probs, axis=1)
         log_probs = K.log(probs + 1e-10)
 
-        return log_probs
+        entropy = -K.mean(probs * K.log(probs + 1e-10))
+
+        return log_probs, entropy
     
+    def logprob_dist_continuous(self, probs, actions):
+        actions = tf.cast(actions, tf.float32)
+        probs_size = tf.cast(probs.shape[-1] / 2, tf.int32)
+        mu, sigma = probs[:, :probs_size], probs[:, probs_size:]
+
+
+        exponent = -0.5 * tf.math.square(actions - mu) / tf.math.square(sigma)
+        log_coeff = -0.5 * tf.math.log(2.0 * np.pi * tf.math.square(sigma))
+        log_prob = log_coeff + exponent
+        # log_prob = tf.reduce_sum(log_prob, axis=1)
+
+        # compute entropy
+        entropy_coeff = 0.5 * tf.math.log(2.0 * np.pi * np.e * tf.math.square(sigma))
+        entropy = tf.reduce_sum(entropy_coeff, axis=1)
+        entropy = -K.mean(entropy)
+        # dist = tfp.distributions.Normal(mu, sigma)
+        # log_prob = dist.log_prob(actions)
+        # entropy = dist.entropy()
+
+        return log_prob, entropy
+
     def actor_loss(self, probs, advantages, old_probs, actions):
         # Defined in https://arxiv.org/abs/1707.06347
 
         if self.action_space == "discrete":
-            log_prob = self.logprob_dist(probs, actions)
-            log_old_prob = self.logprob_dist(old_probs, actions)
-        else:
-            log_prob = self.gaussian_likelihood(probs, actions)
-            log_old_prob = self.gaussian_likelihood(old_probs, actions)
+            log_prob, entropy = self.logprob_dist(probs, actions)
+            log_old_prob, _ = self.logprob_dist(old_probs, actions)
+
+        elif self.action_space == "continuous":
+            log_prob, entropy = self.logprob_dist_continuous(probs, actions)
+            log_old_prob, _ = self.logprob_dist_continuous(old_probs, actions)
+
+            advantages = K.expand_dims(advantages, axis=1)
 
         log_ratio = log_prob - log_old_prob
         ratio = K.exp(log_ratio)
@@ -87,17 +112,10 @@ class PPOAgent:
 
         loss = -K.mean(K.minimum(p1, p2))
 
-        # approx_kl_divergence = K.mean((K.exp(log_ratio) - 1) - log_ratio)
 
-        return loss# , approx_kl_divergence
-    
-    def gaussian_likelihood(self, probs, actions):
-        actions = tf.cast(actions, tf.float32)
-        log_std = -0.5 * K.ones(probs.shape[-1], dtype=np.float32)
-        # https://github.com/hill-a/stable-baselines/blob/master/stable_baselines/sac/policies.py
-        # pre_sum = -0.5 * (((actions-probs)/(K.exp(log_std)+1e-8))**2 + 2*log_std + K.log(2*np.pi)) 
-        pre_sum = -0.5 * (((actions-probs)/(K.exp(log_std)+1e-10))**2 + 2*log_std + K.log(6.283185307179586))
-        return K.sum(pre_sum, axis=1)
+        approx_kl_divergence = K.mean((K.exp(log_ratio) - 1) - log_ratio)
+
+        return loss, entropy, approx_kl_divergence
 
 
     def act(self, state):
@@ -109,15 +127,11 @@ class PPOAgent:
         probs = self.actor(state, training=False).numpy()
         if self.action_space == "discrete":
             actions = np.array([np.random.choice(prob.shape[0], p=prob) for prob in probs])
-        else:
-            _log_std = -0.5 * np.ones(probs.shape, dtype=np.float32)
-            _std = np.exp(_log_std)
 
-            low, high = -1.0, 1.0 # -1 and 1 are boundaries of tanh
-            actions = probs + np.random.uniform(low, high, size=probs.shape) * _std
-            actions = np.clip(actions, low, high)
-
-            # probs = self.gaussian_likelihood(actions, probs)
+        elif self.action_space == "continuous":
+            probs_size = int(probs.shape[-1] / 2)
+            a_probs, sigma = probs[:, :probs_size], probs[:, probs_size:]
+            actions = np.random.normal(a_probs, sigma)
     
         if state_dim == 1:
             return actions[0], probs[0]
@@ -202,7 +216,7 @@ class PPOAgent:
         # @tf.function
         def wrapper(self, data):
             history = {}
-            data = [tf.convert_to_tensor(d) for d in data]
+            # data = [tf.convert_to_tensor(d) for d in data]
             for _ in range(self.train_epochs):
 
                 for i in range(0, data[0].shape[0], self.batch_size):
@@ -217,7 +231,7 @@ class PPOAgent:
         return wrapper
 
     @train_step_wrapper
-    # @tf.function
+    @tf.function
     def train_step(self, data) -> dict:
         states, advantages, old_probs, actions, target = data
 
@@ -227,21 +241,23 @@ class PPOAgent:
 
             # Compute the actor loss value
             # actor_loss, approx_kl_div = self.actor_loss(probs, advantages, old_probs, actions)
-            actor_loss = self.actor_loss(probs, advantages, old_probs, actions)
+            actor_loss, entropy, approx_kl_div = self.actor_loss(probs, advantages, old_probs, actions)
             # Compute the critic loss value
             critic_loss = self.critic_loss(values, target)
             # Compute the entropy loss value
-            entropy = self.entropy(probs)
+            # entropy = 0 # self.entropy(probs)
+            entropy_loss = entropy * self.c2
 
             # Compute actor gradients
-            grads_actor = tape1.gradient(actor_loss - entropy, self.actor.trainable_variables)
+            grads_actor = tape1.gradient(actor_loss + entropy_loss, self.actor.trainable_variables)
+            # grads_actor = tape1.gradient(actor_loss, self.actor.trainable_variables)
             self.actor_optimizer.apply_gradients(zip(grads_actor, self.actor.trainable_variables))
 
             # Compute critic gradients
             grads_critic = tape2.gradient(critic_loss, self.critic.trainable_variables)
             self.critic_optimizer.apply_gradients(zip(grads_critic, self.critic.trainable_variables))
 
-        return {"a_loss": actor_loss, "c_loss": critic_loss, "entropy": entropy} # , "kl_div": approx_kl_div}
+        return {"a_loss": actor_loss, "c_loss": critic_loss, "entropy": entropy, "kl_div": approx_kl_div}
 
     def train(self, states, actions, rewards, old_probs, dones, next_state) -> dict:
         # reshape memory to appropriate shape for training

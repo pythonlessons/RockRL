@@ -2,8 +2,8 @@ import gym
 import numpy as np
 import multiprocessing as mp
 
-def run_env(conn, env_name):
-    env = gym.make(env_name)
+def run_env(conn, env_name, *kwargs):
+    env = gym.make(env_name, *kwargs)
 
     while True:
         # Wait for a message on the connection
@@ -24,16 +24,17 @@ def run_env(conn, env_name):
             conn[1].send((state, reward, done))
 
 class VectorizedEnv:
-    def __init__(self, env_name: str, num_envs: int=2, **kwargs):
+    def __init__(self, env_name: str, num_envs: int=2, *kwargs):
         self.env_name = env_name
 
         env = gym.make(env_name)
         self.observation_space = env.observation_space
         self.action_space = env.action_space
+        self._max_episode_steps = env._max_episode_steps
         env.close()
 
         self.conns = [mp.Pipe() for _ in range(num_envs)]
-        self.envs = [mp.Process(target=run_env, args=(conn, env_name,)) for conn in self.conns]
+        self.envs = [mp.Process(target=run_env, args=(conn, env_name, *kwargs)) for conn in self.conns]
         for env in self.envs:
             env.start()
 
