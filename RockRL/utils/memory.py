@@ -1,5 +1,6 @@
 class Memory:
-    def __init__(self, num_envs=1):
+    def __init__(self, input_shape, num_envs=1):
+        self.input_shape = input_shape
         self.num_envs = num_envs
         self.reset()
 
@@ -22,7 +23,7 @@ class Memory:
 
     def append(self, states, actions, rewards, predictions, dones, next_states):
         # check whether the input is dimensioned for one or multiple environments
-        if states.ndim == 1:
+        if states.ndim == len(self.input_shape):
             states, actions, rewards, predictions, dones, next_states = [[x] for x in [states, actions, rewards, predictions, dones, next_states]]
 
         for i in range(self.num_envs):
