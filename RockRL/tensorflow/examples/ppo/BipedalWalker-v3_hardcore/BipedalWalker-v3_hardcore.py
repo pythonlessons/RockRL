@@ -1,8 +1,7 @@
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # Disable Tensorflow logging
 import gym
-# visible only one gpu
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0" # visible only one gpu
 import numpy as np
 import tensorflow as tf
 for gpu in tf.config.experimental.list_physical_devices('GPU'):
@@ -14,7 +13,6 @@ from RockRL.utils.vectorizedEnv import VectorizedEnv, CustomEnv
 from RockRL.utils.misc import MeanAverage
 from RockRL.utils.memory import Memory
 from RockRL.tensorflow import PPOAgent
-
 
 
 def actor_model(input_shape, action_space):

@@ -39,7 +39,7 @@ def critic_model(input_shape):
 if __name__ == "__main__":
     env_name = 'LunarLander-v2'
 
-    num_envs = 48
+    num_envs = 24
     env = VectorizedEnv(env_object=gym.make, num_envs=num_envs, id=env_name) # , render_mode="human")
     action_space = env.action_space.n
     input_shape = env.observation_space.shape
@@ -88,7 +88,7 @@ if __name__ == "__main__":
 
             if meanAverage.is_best(episode):
                 # save model
-                pass
+                agent.save_models(env_name)
 
             if meanAverage.is_best(episode):
                 # save model
@@ -98,10 +98,10 @@ if __name__ == "__main__":
                     reduce_lr_episode = meanAverage.best_mean_score_episode + wait_best_window
 
             if reduce_lr_episode < episode:
-                agent.reduce_learning_rate(ratio=0.99, verbose=True, min_lr = 5e-06)
+                agent.reduce_learning_rate(ratio=0.95, verbose=True, min_lr = 5e-06)
                 reduce_lr_episode = episode + wait_best_window
 
-            print(episode, score, mean, meanAverage.best_mean_score, meanAverage.best_mean_score_episode)
+            print(episode, score, mean, len(_rewards), meanAverage.best_mean_score, meanAverage.best_mean_score_episode)
 
         if episode >= episodes:
             break
