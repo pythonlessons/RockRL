@@ -8,87 +8,23 @@ import tensorflow as tf
 for gpu in tf.config.experimental.list_physical_devices('GPU'):
     tf.config.experimental.set_memory_growth(gpu, True)
 from keras.models import Model, load_model
-# from keras.layers import Input, Dense
-from keras import layers
 
 from RockRL.utils.vectorizedEnv import VectorizedEnv, CustomEnv
 from RockRL.utils.misc import MeanAverage
 from RockRL.utils.memory import Memory
-from RockRL.tensorflow import PPOAgent
-
-
-
-def actor_model(input_shape, action_space):
-    X_input = layers.Input(input_shape)
-    # X = Dense(512, activation='relu')(X_input)
-    # X = layers.Bidirectional(layers.LSTM(32, return_sequences=True))(X_input)
-    X = layers.LSTM(32)(X_input)
-    X = layers.Flatten()(X)
-    X = layers.Dense(32, activation='relu')(X)
-
-    # X = layers.Flatten()(X_input)
-    # X = Dense(512, activation='relu')(X)
-    # X = Dense(256, activation='relu')(X)
-    # X = Dense(64, activation='relu')(X)
-
-
-    # X = layers.Conv1D(64, 3)(X_input)
-    # X = layers.BatchNormalization()(X)
-    # X = layers.LeakyReLU()(X)
-    # X = layers.Flatten()(X)
-    # X = layers.Dense(64, activation='relu')(X)
-
-    action = layers.Dense(action_space, activation="tanh")(X)
-    sigma = layers.Dense(action_space, activation='softplus')(X)
-    action_sigma = layers.concatenate([action, sigma])
-
-    model = Model(inputs = X_input, outputs = action_sigma)
-    return model
-
-def critic_model(input_shape):
-    X_input = layers.Input(input_shape)
-    # X = layers.Bidirectional(layers.LSTM(32, return_sequences=True))(X_input)
-    X = layers.LSTM(32)(X_input)
-    X = layers.Flatten()(X)
-    X = layers.Dense(32, activation='relu')(X)
-    # X = Dense(512, activation='relu')(X_input)
-    # X = layers.Flatten()(X_input)
-    # X = Dense(512, activation='relu')(X)
-    # X = Dense(256, activation="relu")(X)
-    # X = Dense(64, activation="relu")(X)
-    # X = layers.Conv1D(32, 3)(X_input)
-    # X = layers.BatchNormalization()(X)
-    # X = layers.LeakyReLU()(X)
-    # X = layers.Flatten()(X)
-    # X = layers.Dense(64, activation='relu')(X)
-    value = layers.Dense(1, activation=None)(X)
-
-    model = Model(inputs = X_input, outputs = value)
-    return model
 
 
 if __name__ == "__main__":
     env_name = 'BipedalWalker-v3'
 
-    num_envs = 2
-    env = VectorizedEnv(env_object=CustomEnv, custom_env_object=gym.make, os_hist_steps=16, num_envs=num_envs, id=env_name, render_mode="human", hardcore=True)
-    # env = CustomEnv(custom_env_object=gym.make, os_hist_steps=4, id=env_name)
+    num_envs = 6
+    env = VectorizedEnv(env_object=CustomEnv, custom_env_object=gym.make, os_hist_steps=4, num_envs=num_envs, id=env_name, render_mode="human", hardcore=True)
     # env = VectorizedEnv(env_object=gym.make, num_envs=num_envs, id=env_name) # , render_mode="human")
     action_space = env.action_space.shape[0]
     input_shape = env.observation_space.shape
 
-    agent = load_model("runs/1683898155/BipedalWalker-v3_actor.h5", compile=False)
-
-    # agent = PPOAgent(
-    #     actor = actor_model(input_shape, action_space),
-    #     critic = critic_model(input_shape),
-    #     actor_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0003),
-    #     critic_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0003),
-    #     action_space="continuous",
-    #     batch_size=256,
-    #     train_epochs=5,
-    # )
-    # agent.actor.summary()
+    actor = load_model("runs/1684128290/BipedalWalker-v3_actor.h5", compile=False)
+    actor.summary()
 
     memory = Memory(num_envs=num_envs, input_shape=input_shape)
     # meanAverage = MeanAverage(
@@ -101,7 +37,7 @@ if __name__ == "__main__":
     episode = 0
     while True:
 
-        probs = agent.predict(states, verbose=False)
+        probs = actor.predict(states, verbose=False)
         # probs = agent(states).numpy()
         probs_size = int(probs.shape[-1] / 2)
         actions, sigma = probs[:, :probs_size], probs[:, probs_size:]
