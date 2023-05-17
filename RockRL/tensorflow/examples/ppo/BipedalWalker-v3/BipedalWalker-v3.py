@@ -10,18 +10,17 @@ for gpu in tf.config.experimental.list_physical_devices('GPU'):
 from keras.models import Model, load_model
 from keras import layers
 
-from RockRL.utils.vectorizedEnv import VectorizedEnv, CustomEnv
+from RockRL.utils.vectorizedEnv import VectorizedEnv
 from RockRL.utils.misc import MeanAverage
 from RockRL.utils.memory import Memory
 from RockRL.tensorflow import PPOAgent
 
 
-
 def actor_model(input_shape, action_space):
     X_input = layers.Input(input_shape)
-    X = layers.Bidirectional(layers.LSTM(32, return_sequences=True))(X_input)
-    X = layers.LSTM(32)(X)
-    X = layers.Dense(16, activation='relu')(X)
+    X = layers.Dense(512, activation='relu')(X_input)
+    X = layers.Dense(256, activation='relu')(X)
+    X = layers.Dense(64, activation='relu')(X)
 
     action = layers.Dense(action_space, activation="tanh")(X)
     sigma = layers.Dense(action_space, activation='softplus')(X)
@@ -32,10 +31,9 @@ def actor_model(input_shape, action_space):
 
 def critic_model(input_shape):
     X_input = layers.Input(input_shape)
-    X = layers.Bidirectional(layers.LSTM(32, return_sequences=True))(X_input)
-    X = layers.LSTM(32)(X_input)
-    X = layers.Dense(16, activation='relu')(X)
-
+    X = layers.Dense(512, activation="relu")(X_input)
+    X = layers.Dense(256, activation="relu")(X)
+    X = layers.Dense(64, activation="relu")(X)
     value = layers.Dense(1, activation=None)(X)
 
     model = Model(inputs = X_input, outputs = value)
@@ -46,16 +44,13 @@ if __name__ == "__main__":
     env_name = 'BipedalWalker-v3'
 
     num_envs = 48
-    env = VectorizedEnv(env_object=CustomEnv, custom_env_object=gym.make, os_hist_steps=4, num_envs=num_envs, id=env_name, hardcore=True)# , render_mode="human")
-    # env = VectorizedEnv(env_object=gym.make, num_envs=num_envs, id=env_name) # , render_mode="human")
+    env = VectorizedEnv(env_object=gym.make, num_envs=num_envs, id=env_name) # , render_mode="human")
     action_space = env.action_space.shape[0]
     input_shape = env.observation_space.shape
 
     agent = PPOAgent(
-        actor = load_model("runs/1684126402/BipedalWalker-v3_actor.h5"),
-        critic = load_model("runs/1684126402/BipedalWalker-v3_critic.h5"),
-        # actor = actor_model(input_shape, action_space),
-        # critic = critic_model(input_shape),
+        actor = actor_model(input_shape, action_space),
+        critic = critic_model(input_shape),
         actor_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0003),
         critic_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0003),
         action_space="continuous",
@@ -77,7 +72,7 @@ if __name__ == "__main__":
     states = env.reset()
     reduce_lr_episode = 200
     wait_best_window = 100
-    episodes = 100000
+    episodes = 10000
     episode = 0
     while True:
 
@@ -87,11 +82,7 @@ if __name__ == "__main__":
         memory.append(states, actions, rewards, probs, dones, next_states)
         states = next_states
 
-        rewards_len = np.array([len(r) for r in memory.rewards])
-        if np.any(rewards_len >= env._max_episode_steps):
-            dones = np.array([True if r >= env._max_episode_steps else False for r in rewards_len])
-
-        for index in np.where(dones)[0]:
+        for index in memory.done_indices(env._max_episode_steps):
             _states, _actions, _rewards, _predictions, _dones, _next_state = memory.get(index=index)
             agent.train(_states, _actions, _rewards, _predictions, _dones, _next_state)
             memory.reset(index=index)
@@ -109,7 +100,7 @@ if __name__ == "__main__":
                     reduce_lr_episode = meanAverage.best_mean_score_episode + wait_best_window
 
             if reduce_lr_episode < episode:
-                agent.reduce_learning_rate(ratio=0.99, verbose=True, min_lr = 5e-06)
+                agent.reduce_learning_rate(ratio=0.95, verbose=True, min_lr = 5e-06)
                 reduce_lr_episode = episode + wait_best_window
 
             print(episode, score, mean, len(_rewards), meanAverage.best_mean_score, meanAverage.best_mean_score_episode)
@@ -118,45 +109,3 @@ if __name__ == "__main__":
             break
 
     env.close()
-
-    # # env = gym.make(env_name) # , render_mode="human")
-    # env = CustomEnv(env_object=gym.make, os_hist_steps=4, id=env_name)
-    # action_space = env.action_space.shape[0]
-    # input_shape = env.observation_space.shape
-    # low, high = env.action_space.low, env.action_space.high
-
-    # agent = PPOAgent(
-    #     actor = actor_model(input_shape, action_space),
-    #     critic = critic_model(input_shape),
-    #     actor_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
-    #     critic_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
-    #     action_space="continuous",
-    #     batch_size=256
-    # )
-
-    # episodes = 10000
-    # memory = Memory(input_shape=input_shape)
-    # meanAverage = MeanAverage()
-    # for episode in range(episodes):
-    #     # Instantiate or reset games memory
-    #     state = env.reset()[0]
-    #     done, score = False, 0
-    #     memory.reset()
-    #     while True:
-    #         # Actor picks an action
-    #         action, prob = agent.act(state)
-    #         # Retrieve new state, reward, and whether the state is terminal
-    #         next_state, reward, done, _ = env.step(action)[:4]
-    #         # Memorize (state, action, reward) for training
-    #         memory.append(state, action, reward, prob, done, next_state)
-    #         # Update current state
-    #         state = next_state
-    #         score += reward
-    #         if done or len(memory.rewards[0]) >= env._max_episode_steps: #  or score < -200:
-                
-    #             states, actions, rewards, predictions, dones, next_state = memory.get()
-    #             agent.train(states, actions, rewards, predictions, dones, next_state)
-                
-    #             mean = meanAverage(score)
-    #             print(episode, score, mean, len(memory.rewards[0]))
-    #             break
