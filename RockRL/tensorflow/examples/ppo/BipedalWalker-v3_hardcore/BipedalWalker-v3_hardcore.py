@@ -45,7 +45,6 @@ if __name__ == "__main__":
 
     num_envs = 48
     env = VectorizedEnv(env_object=CustomEnv, custom_env_object=gym.make, os_hist_steps=4, num_envs=num_envs, id=env_name, hardcore=True)# , render_mode="human")
-    # env = VectorizedEnv(env_object=gym.make, num_envs=num_envs, id=env_name) # , render_mode="human")
     action_space = env.action_space.shape[0]
     input_shape = env.observation_space.shape
 
@@ -74,7 +73,7 @@ if __name__ == "__main__":
         best_mean_score_episode=200,
     )
     states = env.reset()
-    reduce_lr_episode = 200
+    reduce_lr_episode = 2000
     wait_best_window = 100
     episodes = 100000
     episode = 0
@@ -86,13 +85,7 @@ if __name__ == "__main__":
         memory.append(states, actions, rewards, probs, dones, next_states)
         states = next_states
 
-        done_indices = np.where(dones)[0]
-        rewards_len = np.array([len(r) for r in memory.rewards])
-        max_episodes = np.where(rewards_len >= env._max_episode_steps)[0]
-        if max_episodes.any():
-            done_indices = np.unique(np.concatenate((done_indices, max_episodes)))
-
-        for index in done_indices:
+        for index in memory.done_indices(env._max_episode_steps):
             _states, _actions, _rewards, _predictions, _dones, _next_state = memory.get(index=index)
             agent.train(_states, _actions, _rewards, _predictions, _dones, _next_state)
             memory.reset(index=index)
