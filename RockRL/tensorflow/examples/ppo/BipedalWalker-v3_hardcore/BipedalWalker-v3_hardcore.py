@@ -19,7 +19,8 @@ def actor_model(input_shape, action_space):
     X_input = layers.Input(input_shape)
     X = layers.Bidirectional(layers.LSTM(32, return_sequences=True))(X_input)
     X = layers.LSTM(32)(X)
-    X = layers.Dense(16, activation='relu')(X)
+    X = layers.Dense(32, kernel_initializer="he_uniform")(X)
+    X = layers.LeakyReLU(alpha=0.1)(X)
 
     action = layers.Dense(action_space, activation="tanh")(X)
     sigma = layers.Dense(action_space, activation='softplus')(X)
@@ -32,7 +33,8 @@ def critic_model(input_shape):
     X_input = layers.Input(input_shape)
     X = layers.Bidirectional(layers.LSTM(32, return_sequences=True))(X_input)
     X = layers.LSTM(32)(X)
-    X = layers.Dense(16, activation='relu')(X)
+    X = layers.Dense(32, kernel_initializer="he_uniform")(X)
+    X = layers.LeakyReLU(alpha=0.1)(X)
 
     value = layers.Dense(1, activation=None)(X)
 
@@ -49,28 +51,30 @@ if __name__ == "__main__":
     input_shape = env.observation_space.shape
 
     agent = PPOAgent(
-        actor = actor_model(input_shape, action_space),
-        critic = critic_model(input_shape),
+        actor = load_model("runs/1684395972/BipedalWalker-v3_actor.h5"), # load pretrained model on simple environment with optimizer
+        critic = load_model("runs/1684395972/BipedalWalker-v3_critic.h5"),
+        # actor = actor_model(input_shape, action_space),
+        # critic = critic_model(input_shape),
         actor_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0003),
         critic_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0003),
         action_space="continuous",
         batch_size=256,
         train_epochs=10,
-        gamma=0.99,
+        gamma=0.98,
         lamda=0.90,
         c2=0.001,
         compile=True,
     )
     agent.actor.summary()
 
-    agent.actor.load_weights("runs/1684217830/BipedalWalker-v3_actor.h5")
-    agent.critic.load_weights("runs/1684217830/BipedalWalker-v3_critic.h5")
+    # agent.actor.load_weights("runs/1684395972/BipedalWalker-v3_actor.h5")
+    # agent.critic.load_weights("runs/1684395972/BipedalWalker-v3_critic.h5")
 
     memory = Memory(num_envs=num_envs, input_shape=input_shape)
     meanAverage = MeanAverage(
         window_size=100,
         best_mean_score=-np.inf,
-        best_mean_score_episode=200,
+        best_mean_score_episode=2000,
     )
     states = env.reset()
     reduce_lr_episode = 2000
@@ -103,7 +107,7 @@ if __name__ == "__main__":
                     reduce_lr_episode = meanAverage.best_mean_score_episode + wait_best_window
 
             if reduce_lr_episode < episode:
-                agent.reduce_learning_rate(ratio=0.99, verbose=True, min_lr = 5e-06)
+                agent.reduce_learning_rate(ratio=0.99, verbose=True, min_lr = 1e-05)
                 reduce_lr_episode = episode + wait_best_window
 
             print(episode, score, mean, len(_rewards), meanAverage.best_mean_score, meanAverage.best_mean_score_episode)

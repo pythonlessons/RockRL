@@ -40,6 +40,10 @@ def run_env(conn, env_object, kwargs):
             elif message == 'close':
                 env.close()
                 break
+            elif message == 'render':
+                results = env.render()
+                results = results if results is not None else []
+                conn[1].send(results)
 
         else:
             # Assume it's an action
@@ -82,6 +86,17 @@ class VectorizedEnv:
         
         return np.array(next_states), np.array(rewards), np.array(dones)
     
+    def render(self, index=None):
+        if index is None:
+            for conn in self.conns:
+                conn[0].send('render')
+            results = [conn[0].recv() for conn in self.conns]
+        else:
+            self.conns[index][0].send('render')
+            results = self.conns[index][0].recv()
+
+        return results
+
     def close(self):
         for conn, env in zip(self.conns, self.envs):
             conn[0].send('close')

@@ -70,13 +70,7 @@ if __name__ == "__main__":
         memory.append(states, actions, rewards, probs, dones, next_states)
         states = next_states
 
-        done_indices = np.where(dones)[0]
-        rewards_len = np.array([len(r) for r in memory.rewards])
-        max_episodes = np.where(rewards_len >= env._max_episode_steps)[0]
-        if max_episodes.any():
-            done_indices = np.unique(np.concatenate((done_indices, max_episodes)))
-
-        for index in done_indices:
+        for index in memory.done_indices(env._max_episode_steps):
             _states, _actions, _rewards, _predictions, _dones, _next_state = memory.get(index=index)
             agent.train(_states, _actions, _rewards, _predictions, _dones, _next_state)
             memory.reset(index=index)
@@ -85,10 +79,6 @@ if __name__ == "__main__":
             episode += 1
             score = np.sum(_rewards)
             mean = meanAverage(score)
-
-            if meanAverage.is_best(episode):
-                # save model
-                agent.save_models(env_name)
 
             if meanAverage.is_best(episode):
                 # save model
@@ -107,47 +97,3 @@ if __name__ == "__main__":
             break
 
     env.close()
-                
-
-
-    # env = gym.make(env_name)
-    # action_space = env.action_space.n
-    # input_shape = env.observation_space.shape
-
-    # agent = PPOAgent(
-    #     actor = actor_model(input_shape, action_space),
-    #     critic = critic_model(input_shape),
-    #     batch_size=256
-    # )
-    # agent.compile(
-    #     actor_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0003),
-    #     critic_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0003),
-    #     run_eagerly=False
-    #     )
-
-    # episodes = 10000
-    # memory = Memory() 
-    # meanAverage = MeanAverage()
-    # for episode in range(episodes):
-    #     # Instantiate or reset games memory
-    #     state = env.reset()[0]
-    #     done, score = False, 0
-    #     memory.reset()
-    #     while True:
-    #         # Actor picks an action
-    #         action, prob = agent.act(state)
-    #         # Retrieve new state, reward, and whether the state is terminal
-    #         next_state, reward, done, _ = env.step(action)[:4]
-    #         # Memorize (state, action, reward) for training
-    #         memory.append(state, action, reward, prob, done, next_state)
-    #         # Update current state
-    #         state = next_state
-    #         score += reward
-    #         if done or score < -350:
-                
-    #             states, actions, rewards, predictions, dones, next_state = memory.get()
-    #             agent.train(states, actions, rewards, predictions, dones, next_state)
-                
-    #             mean = meanAverage(score)
-    #             print(episode, score, mean)
-    #             break
