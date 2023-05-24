@@ -19,11 +19,11 @@ if __name__ == "__main__":
     env_name = 'BipedalWalker-v3'
 
     num_envs = 6
-    env = VectorizedEnv(env_object=CustomEnv, custom_env_object=gym.make, os_hist_steps=4, num_envs=num_envs, id=env_name, render_mode="human", hardcore=False)
+    env = VectorizedEnv(env_object=CustomEnv, custom_env_object=gym.make, os_hist_steps=4, num_envs=num_envs, id=env_name, render_mode="human", hardcore=True)
     action_space = env.action_space.shape[0]
     input_shape = env.observation_space.shape
 
-    actor = load_model("runs/1684910792/BipedalWalker-v3_actor.h5", compile=False)
+    actor = load_model("runs/1684926710/BipedalWalker-v3_actor.h5", compile=False)
     actor.summary()
 
     memory = Memory(num_envs=num_envs, input_shape=input_shape)

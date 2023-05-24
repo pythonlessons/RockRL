@@ -203,9 +203,9 @@ class PPOAgent:
         next_values = np.array(next_values, dtype=np.float32)
         rewards = np.array(rewards, dtype=np.float32)
         dones = 1 - np.array(dones, dtype=np.float32)
-        deltas = rewards + gamma * next_values * dones - values
-        gaes = np.copy(deltas) 
-        for t in reversed(range(len(deltas) - 1)):
+        gaes = rewards + gamma * next_values * dones - values
+        # gaes = np.copy(deltas) 
+        for t in reversed(range(len(gaes) - 1)):
             update = dones[t] * gamma * lamda * gaes[t + 1]
             gaes[t] = gaes[t] + update
 
@@ -322,6 +322,7 @@ class PPOAgent:
     def train(self, states, actions, rewards, old_probs, dones, next_state) -> dict:
         # reshape memory to appropriate shape for training
         old_probs = np.array(old_probs)
+        # all_states = np.concatenate([states, [next_state]], axis=0)
         all_states = np.array(states + [next_state])
         states = np.array(states)
         actions = np.array(actions)
@@ -346,5 +347,8 @@ class PPOAgent:
         # target = target[shuffle]
 
         history = self.train_step((states, advantages, old_probs, actions, target))
+
+        # Clear TensorFlow sessions
+        # tf.keras.backend.clear_session()
 
         return history

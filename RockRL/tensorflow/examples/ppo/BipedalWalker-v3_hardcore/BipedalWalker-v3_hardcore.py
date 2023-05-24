@@ -66,7 +66,7 @@ def critic_model(input_shape):
 if __name__ == "__main__":
     env_name = 'BipedalWalker-v3'
 
-    num_envs = 48
+    num_envs = 4
     env = VectorizedEnv(env_object=CustomEnv, custom_env_object=gym.make, os_hist_steps=4, num_envs=num_envs, id=env_name, hardcore=True)# , render_mode="human")
     action_space = env.action_space.shape[0]
     input_shape = env.observation_space.shape
@@ -77,16 +77,17 @@ if __name__ == "__main__":
         critic = load_model("runs/1684910792/BipedalWalker-v3_critic.h5"),
         # actor = actor_model(input_shape, action_space),
         # critic = critic_model(input_shape),
-        actor_optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
-        critic_optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
+        actor_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0005),
+        critic_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0005),
         action_space="continuous",
         min_max_action=min_max_action,
-        batch_size=512,
+        batch_size=128,
         train_epochs=10,
         gamma=0.99,
         lamda=0.90,
         c2=0.001,
         compile=True,
+        shuffle=False,
     )
     agent.actor.summary()
 

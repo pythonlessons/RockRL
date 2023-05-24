@@ -39,7 +39,7 @@ def critic_model(input_shape):
 if __name__ == "__main__":
     env_name = 'LunarLander-v2'
 
-    num_envs = 48
+    num_envs = 2
     env = VectorizedEnv(env_object=gym.make, num_envs=num_envs, id=env_name) # , render_mode="human")
     action_space = env.action_space.n
     input_shape = env.observation_space.shape
