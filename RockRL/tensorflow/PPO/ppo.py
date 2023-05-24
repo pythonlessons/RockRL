@@ -22,9 +22,11 @@ class PPOAgent:
         train_epochs: int=10,
         batch_size: int=64,
         epoch: int = 0,
+        min_max_action: typing.Tuple[float, float] = (-1, 1),
         logdir: str = f"runs/{int(time.time())}",
         writer = None,
-        compile: bool=True
+        compile: bool=True,
+        shuffle: bool=True,
         ):
         """ Reinforcement Learning agent that learns using Proximal Policy Optimization.
 
@@ -42,9 +44,11 @@ class PPOAgent:
             train_epochs (int): Number of epochs to train on each batch. Defaults to 10.
             batch_size (int): Batch size. Defaults to 64.
             epoch (int): Current epoch. Defaults to 0.
+            min_max_action (typing.Tuple[float, float]): Min and max values for continuous action space. Defaults to (-1, 1).
             logdir (str): Path to logdir. Defaults to f"runs/{int(time.time())}".
             writer (tf.summary.SummaryWriter): Tensorboard writer. Defaults to None.
             compile (bool): Whether to compile the models. Defaults to True.
+            shuffle (bool): Whether to shuffle the data. Defaults to True.
         """
         self.actor = actor
         self.critic = critic
@@ -57,6 +61,8 @@ class PPOAgent:
         self.train_epochs = train_epochs
         self.batch_size = batch_size
         self.epoch = epoch
+        self.min_max_action = min_max_action
+        self.shuffle = shuffle
 
         # Compile the models
         if compile:
@@ -283,6 +289,15 @@ class PPOAgent:
     def train_step(self, data) -> dict:
         states, advantages, old_probs, actions, target = data
 
+        if self.shuffle:
+            indices = tf.range(0, states.shape[0])
+            indices = tf.random.shuffle(indices)
+            states = tf.gather(states, indices)
+            advantages = tf.gather(advantages, indices)
+            old_probs = tf.gather(old_probs, indices)
+            actions = tf.gather(actions, indices)
+            target = tf.gather(target, indices)
+
         with tf.GradientTape() as tape1, tf.GradientTape() as tape2:
             probs = self.actor(states, training=True)  # Forward pass
             values = self.critic(states, training=True)
@@ -321,6 +336,14 @@ class PPOAgent:
         if self.writer:
             with self.writer.as_default():
                 tf.summary.scalar("rewards", np.sum(rewards), step = self.epoch)
+
+        # shuffle = np.arange(states.shape[0])
+        # np.random.shuffle(shuffle)
+        # states = states[shuffle]
+        # advantages = advantages[shuffle]
+        # old_probs = old_probs[shuffle]
+        # actions = actions[shuffle]
+        # target = target[shuffle]
 
         history = self.train_step((states, advantages, old_probs, actions, target))
 

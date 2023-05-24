@@ -39,7 +39,7 @@ def critic_model(input_shape):
 if __name__ == "__main__":
     env_name = 'LunarLander-v2'
 
-    num_envs = 24
+    num_envs = 48
     env = VectorizedEnv(env_object=gym.make, num_envs=num_envs, id=env_name) # , render_mode="human")
     action_space = env.action_space.n
     input_shape = env.observation_space.shape
@@ -49,7 +49,7 @@ if __name__ == "__main__":
         critic = critic_model(input_shape),
         actor_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0003),
         critic_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0003),
-        batch_size=256
+        batch_size=1024,
     )
 
     memory = Memory(num_envs=num_envs, input_shape=input_shape)
@@ -73,6 +73,7 @@ if __name__ == "__main__":
         for index in memory.done_indices(env._max_episode_steps):
             _states, _actions, _rewards, _predictions, _dones, _next_state = memory.get(index=index)
             agent.train(_states, _actions, _rewards, _predictions, _dones, _next_state)
+            # agent.threaded_train(_states, _actions, _rewards, _predictions, _dones, _next_state)
             memory.reset(index=index)
             states[index] = env.reset(index)
 
@@ -84,11 +85,11 @@ if __name__ == "__main__":
                 # save model
                 agent.save_models(env_name)
 
-                if meanAverage.best_mean_score_episode > reduce_lr_episode:
-                    reduce_lr_episode = meanAverage.best_mean_score_episode + wait_best_window
+                if episode > reduce_lr_episode - wait_best_window:
+                    reduce_lr_episode = episode + wait_best_window
 
             if reduce_lr_episode < episode:
-                agent.reduce_learning_rate(ratio=0.95, verbose=True, min_lr = 5e-06)
+                agent.reduce_learning_rate(ratio=0.99, verbose=True, min_lr = 5e-06)
                 reduce_lr_episode = episode + wait_best_window
 
             print(episode, score, mean, len(_rewards), meanAverage.best_mean_score, meanAverage.best_mean_score_episode)
@@ -96,4 +97,5 @@ if __name__ == "__main__":
         if episode >= episodes:
             break
 
+    agent.close()
     env.close()
