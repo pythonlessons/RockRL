@@ -114,7 +114,7 @@ if __name__ == "__main__":
 
         for index in memory.done_indices(env._max_episode_steps):
             _states, _actions, _rewards, _predictions, _dones, _next_state = memory.get(index=index)
-            agent.train(_states, _actions, _rewards, _predictions, _dones, _next_state)
+            # agent.train(_states, _actions, _rewards, _predictions, _dones, _next_state)
             memory.reset(index=index)
             states[index] = env.reset(index)
 

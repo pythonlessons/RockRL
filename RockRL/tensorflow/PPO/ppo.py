@@ -88,8 +88,9 @@ class PPOAgent:
             include_optimizer (bool, optional): Whether to save the optimizer state. Defaults to True.
         """
         path = path or self.logdir
-        self.actor.save(path + f"/{name}_actor.h5", include_optimizer=include_optimizer)
-        self.critic.save(path + f"/{name}_critic.h5", include_optimizer=include_optimizer)
+        if path:
+            self.actor.save(path + f"/{name}_actor.h5", include_optimizer=include_optimizer)
+            self.critic.save(path + f"/{name}_critic.h5", include_optimizer=include_optimizer)
 
     def critic_loss(self, y_pred: tf.Tensor, target: tf.Tensor) -> tf.Tensor:
         """ Mean Squared Error loss for critic"""
@@ -158,6 +159,20 @@ class PPOAgent:
 
         return loss, entropy, approx_kl_divergence
 
+    def value(self, state: np.ndarray, training: bool=False) -> np.ndarray:
+        """ Compute the value of the state """
+        state_dim = state.ndim
+        if state_dim < len(self.critic.input_shape):
+            state = np.expand_dims(state, axis=0)
+
+        values = self.critic(state, training=training).numpy()
+
+        values = np.squeeze(values, axis=1)
+        if state_dim < len(self.critic.input_shape):
+            return values[0]
+
+        return values
+
     def act(self, state: np.ndarray) -> typing.Tuple[np.ndarray, np.ndarray]:
         state_dim = state.ndim
         if state_dim < len(self.actor.input_shape):
@@ -215,27 +230,27 @@ class PPOAgent:
 
         return  gaes, target
 
-    def predict_chunks(
-            self, 
-            model: tf.keras.models.Model, 
-            data: typing.Union[np.ndarray, tf.Tensor],
-            batch_size: int=64, 
-            training: bool=True
-        ) -> tf.Tensor:
-        """ Predict data in chunks to avoid OOM error.
+    # def predict_chunks(
+    #         self, 
+    #         model: tf.keras.models.Model, 
+    #         data: typing.Union[np.ndarray, tf.Tensor],
+    #         batch_size: int=64, 
+    #         training: bool=True
+    #     ) -> tf.Tensor:
+    #     """ Predict data in chunks to avoid OOM error.
 
-        Args:
-            model (tf.keras.models.Model): Model to predict data with.
-            data (typing.Union[np.ndarray, tf.Tensor]): Data to predict.
-            batch_size (int, optional): Batch size to use. Defaults to 64.
-            training (bool, optional): Whether to use training mode. Defaults to True.
-        """
-        predictions = []
-        for i in range(0, data.shape[0], batch_size):
-            batch = data[i:i+batch_size]
-            predictions.append(model(batch, training=training))
+    #     Args:
+    #         model (tf.keras.models.Model): Model to predict data with.
+    #         data (typing.Union[np.ndarray, tf.Tensor]): Data to predict.
+    #         batch_size (int, optional): Batch size to use. Defaults to 64.
+    #         training (bool, optional): Whether to use training mode. Defaults to True.
+    #     """
+    #     predictions = []
+    #     for i in range(0, data.shape[0], batch_size):
+    #         batch = data[i:i+batch_size]
+    #         predictions.append(model(batch, training=training))
 
-        return tf.concat(predictions, axis=0)
+    #     return tf.concat(predictions, axis=0)
     
     def reduce_learning_rate(self, ratio: int = 0.95, verbose: bool = True, min_lr: float = 1e-06):
         if float(self.actor.optimizer.lr.numpy()) > min_lr:
@@ -247,6 +262,13 @@ class PPOAgent:
             if verbose: 
                 print(f"Reduced learning rate to Critic: {self.critic.optimizer.lr.numpy()}")
 
+    def log_to_writer(self, data: dict):
+        if self.writer:
+            with self.writer.as_default():
+                for key, value in data.items():
+                    tf.summary.scalar(key, value, step = self.epoch)
+
+                self.writer.flush()
             
     def custom_logger(self, history: dict) -> dict:
         for key, value in history.items():
@@ -256,9 +278,12 @@ class PPOAgent:
         history["critic_lr"] = self.critic.optimizer.lr.numpy()
 
         if self.writer:
-            with self.writer.as_default():
-                for key, value in history.items():
-                    tf.summary.scalar(key, value, step = self.epoch)
+            self.log_to_writer(history)
+            # with self.writer.as_default():
+            #     for key, value in history.items():
+            #         tf.summary.scalar(key, value, step = self.epoch)
+
+            #     self.writer.flush()
 
         history["epoch"] = self.epoch
         self.epoch += 1
@@ -319,36 +344,30 @@ class PPOAgent:
 
         return {"a_loss": actor_loss, "c_loss": critic_loss, "entropy": entropy, "kl_div": approx_kl_div}
 
-    def train(self, states, actions, rewards, old_probs, dones, next_state) -> dict:
+    # def train(self, states, actions, rewards, old_probs, dones, next_state) -> dict:
+    def train(self, states, actions, rewards, old_probs, advantages, target) -> dict:
         # reshape memory to appropriate shape for training
         old_probs = np.array(old_probs)
         # all_states = np.concatenate([states, [next_state]], axis=0)
-        all_states = np.array(states + [next_state])
+        # all_states = np.array(states + [next_state])
         states = np.array(states)
         actions = np.array(actions)
 
         # Get Critic network predictions 
-        all_values = self.predict_chunks(self.critic, all_states, batch_size=self.batch_size, training=False).numpy().squeeze()
-        values, next_values = all_values[:-1], all_values[1:]
+        # all_values = self.predict_chunks(self.critic, all_states, batch_size=self.batch_size, training=False).numpy().squeeze()
+        # values, next_values = all_values[:-1], all_values[1:]
 
         # Compute discounted rewards and advantages
-        advantages, target = self.get_gaes(rewards, dones, values, next_values, gamma=self.gamma, lamda=self.lamda, normalize=True)
+        # advantages, target = self.get_gaes(rewards, dones, values, next_values, gamma=self.gamma, lamda=self.lamda, normalize=True)
         
-        if self.writer:
-            with self.writer.as_default():
-                tf.summary.scalar("rewards", np.sum(rewards), step = self.epoch)
+        self.log_to_writer({"rewards": np.sum(rewards)})
 
-        # shuffle = np.arange(states.shape[0])
-        # np.random.shuffle(shuffle)
-        # states = states[shuffle]
-        # advantages = advantages[shuffle]
-        # old_probs = old_probs[shuffle]
-        # actions = actions[shuffle]
-        # target = target[shuffle]
+        # if self.writer:
+        #     with self.writer.as_default():
+        #         tf.summary.scalar("rewards", np.sum(rewards), step = self.epoch)
+        #         self.writer.flush()
+
 
         history = self.train_step((states, advantages, old_probs, actions, target))
-
-        # Clear TensorFlow sessions
-        # tf.keras.backend.clear_session()
 
         return history

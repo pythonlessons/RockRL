@@ -39,7 +39,7 @@ def critic_model(input_shape):
 if __name__ == "__main__":
     env_name = 'LunarLander-v2'
 
-    num_envs = 2
+    num_envs = 24
     env = VectorizedEnv(env_object=gym.make, num_envs=num_envs, id=env_name) # , render_mode="human")
     action_space = env.action_space.n
     input_shape = env.observation_space.shape
@@ -49,7 +49,9 @@ if __name__ == "__main__":
         critic = critic_model(input_shape),
         actor_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0003),
         critic_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0003),
-        batch_size=1024,
+        batch_size=64,
+        shuffle=True,
+        # logdir=None,
     )
 
     memory = Memory(num_envs=num_envs, input_shape=input_shape)
@@ -65,14 +67,21 @@ if __name__ == "__main__":
     episode = 0
     while True:
         actions, probs = agent.act(states)
+        values = agent.value(states)
 
         next_states, rewards, dones = env.step(actions)
-        memory.append(states, actions, rewards, probs, dones, next_states)
+        memory.append(states, actions, rewards, probs, dones, next_states, values)
         states = next_states
 
         for index in memory.done_indices(env._max_episode_steps):
-            _states, _actions, _rewards, _predictions, _dones, _next_state = memory.get(index=index)
-            agent.train(_states, _actions, _rewards, _predictions, _dones, _next_state)
+            _states, _actions, _rewards, _predictions, _dones, _next_state, _values = memory.get(index=index)
+            _next_value = agent.value(next_states[index])
+            next_values = _values[1:] + [_next_value]
+
+            advantages, target = agent.get_gaes(_rewards, _dones, _values, next_values, gamma=agent.gamma, lamda=agent.lamda, normalize=True)
+
+            # agent.train(_states, _actions, _rewards, _predictions, _dones, _next_state)
+            agent.train(_states, _actions, _rewards, _predictions, advantages, target)
             # agent.threaded_train(_states, _actions, _rewards, _predictions, _dones, _next_state)
             memory.reset(index=index)
             states[index] = env.reset(index)

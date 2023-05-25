@@ -76,6 +76,7 @@ class Memory:
             self.predictions = [[] for _ in range(self.num_envs)]
             self.dones = [[] for _ in range(self.num_envs)]
             self.next_states = [None for _ in range(self.num_envs)]
+            self.values = [[] for _ in range(self.num_envs)]
 
         else:
             self.states[index] = []
@@ -84,13 +85,14 @@ class Memory:
             self.predictions[index] = []
             self.dones[index] = []
             self.next_states[index] = None
+            self.values[index] = []
 
         gc.collect()
 
-    def append(self, states, actions, rewards, predictions, dones, next_states):
+    def append(self, states, actions, rewards, predictions, dones, next_states, values):
         # check whether the input is dimensioned for one or multiple environments
         if states.ndim == len(self.input_shape):
-            states, actions, rewards, predictions, dones, next_states = [[x] for x in [states, actions, rewards, predictions, dones, next_states]]
+            states, actions, rewards, predictions, dones, next_states, values = [[x] for x in [states, actions, rewards, predictions, dones, next_states, values]]
 
         for i in range(self.num_envs):
             self.states[i].append(states[i])
@@ -99,14 +101,15 @@ class Memory:
             self.predictions[i].append(predictions[i])
             self.dones[i].append(dones[i])
             self.next_states[i] = next_states[i]
+            self.values[i].append(values[i])
 
     def get(self, index: int=None):
         if self.num_envs == 1:
-            return self.states[0], self.actions[0], self.rewards[0], self.predictions[0], self.dones[0], self.next_states[0]
+            return self.states[0], self.actions[0], self.rewards[0], self.predictions[0], self.dones[0], self.next_states[0], self.values[0]
         
         if index is None:
             raise ValueError("Must provide indexes when using multiple environments")
-        return self.states[index], self.actions[index], self.rewards[index], self.predictions[index], self.dones[index], self.next_states[index]
+        return self.states[index], self.actions[index], self.rewards[index], self.predictions[index], self.dones[index], self.next_states[index], self.values[index]
     
     def lengths(self) -> np.ndarray:
         """ Returns the lengths of the episodes in the memory for each environment"""
