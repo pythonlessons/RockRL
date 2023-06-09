@@ -12,9 +12,9 @@ from keras.models import Model, load_model
 if __name__ == "__main__":
     env_name = 'LunarLander-v2'
 
-    env = gym.make(env_name, render_mode="rgb_array")
+    env = gym.make(env_name, render_mode="human")
 
-    actor = load_model("runs/1684414014/LunarLander-v2_actor.h5", compile=False)
+    actor = load_model("runs/1686050505/LunarLander-v2_actor.h5", compile=False)
     actor.summary()
 
     states = env.reset()[0]

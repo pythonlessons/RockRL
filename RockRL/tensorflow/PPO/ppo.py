@@ -1,3 +1,4 @@
+import yaml
 import os
 import time
 import typing
@@ -5,50 +6,55 @@ import numpy as np
 import tensorflow as tf
 from keras import backend as K
 
+import tensorflow_probability as tfp
+
 class PPOAgent:
     """ Reinforcement Learning agent that learns using Proximal Policy Optimization. """
     def __init__(
         self, 
         actor: tf.keras.models.Model,
         critic: tf.keras.models.Model,
-        actor_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
-        critic_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
         action_space: str="discrete",
         gamma: float=0.99,
         lamda: float=0.95,
         loss_clipping: float=0.2,
         c1: float=0.5,
-        c2: float=0.001,
+        c2: float=0.01,
         train_epochs: int=10,
+        train_epochs_annealing: bool=True,
         batch_size: int=64,
         epoch: int = 0,
-        min_max_action: typing.Tuple[float, float] = (-1, 1),
         logdir: str = f"runs/{int(time.time())}",
         writer = None,
-        compile: bool=True,
+        writer_comment: str = "",
         shuffle: bool=True,
+        kl_coeff: float=0.2,
+        grad_clip_value: float=0.5,
         ):
         """ Reinforcement Learning agent that learns using Proximal Policy Optimization.
 
         Args:
             actor (tf.keras.models.Model): Actor model
             critic (tf.keras.models.Model): Critic model
-            actor_optimizer (tf.keras.optimizers.Optimizer): Optimizer for actor
-            critic_optimizer (tf.keras.optimizers.Optimizer): Optimizer for critic
+            optimizer (tf.keras.optimizers.Optimizer): Optimizer for actor and critic models. Defaults to tf.keras.optimizers.Adam(learning_rate=0.0001).
             action_space (str): Action space type. Either 'discrete' or 'continuous'. Defaults to 'discrete'.
             gamma (float): Discount factor for future rewards. Defaults to 0.99.
             lamda (float): Lambda for Generalized Advantage Estimation. Defaults to 0.95.
             loss_clipping (float): Epsilon in clipped loss. Defaults to 0.2.
             c1 (float): Value coefficient. Defaults to 0.5.
-            c2 (float): Entropy coefficient. Defaults to 0.001.
+            c2 (float): Entropy coefficient. Defaults to 0.01.
             train_epochs (int): Number of epochs to train on each batch. Defaults to 10.
+            train_epochs_annealing (bool): Whether to anneal the learning rate for the number of epochs to train on each batch. Defaults to True.
             batch_size (int): Batch size. Defaults to 64.
             epoch (int): Current epoch. Defaults to 0.
-            min_max_action (typing.Tuple[float, float]): Min and max values for continuous action space. Defaults to (-1, 1).
             logdir (str): Path to logdir. Defaults to f"runs/{int(time.time())}".
             writer (tf.summary.SummaryWriter): Tensorboard writer. Defaults to None.
+            writer_comment (str): Comment for Tensorboard writer. Defaults to "".
             compile (bool): Whether to compile the models. Defaults to True.
             shuffle (bool): Whether to shuffle the data. Defaults to True.
+            kl_coeff (float): KL divergence coefficient, to prevent the policy from changing too much. Defaults to 0.2.
+            grad_clip_value (float): Value to clip gradients to prevent exploding gradients. Defaults to 0.5.
         """
         self.actor = actor
         self.critic = critic
@@ -59,27 +65,49 @@ class PPOAgent:
         self.c1 = c1
         self.c2 = c2
         self.train_epochs = train_epochs
+        self.train_epochs_annealing = train_epochs_annealing
         self.batch_size = batch_size
         self.epoch = epoch
-        self.min_max_action = min_max_action
         self.shuffle = shuffle
+        self.kl_coeff = kl_coeff
+        self.grad_clip_value = grad_clip_value
 
-        # Compile the models
-        if compile:
-            self.actor.compile(optimizer=actor_optimizer)
-            self.critic.compile(optimizer=critic_optimizer)
+        self.optimizer = optimizer
+        self.learning_rate = float(self.optimizer.lr.numpy())
 
         assert self.action_space in ["discrete", "continuous"], "action_space must be either 'discrete' or 'continuous'"
 
         # Tensorboard logging
         self.logdir = logdir
         self.writer = writer
+        self.writer_comment = writer_comment
 
         if self.logdir and not writer:
             os.makedirs(self.logdir, exist_ok=True)
-            self.writer = tf.summary.create_file_writer(self.logdir)
+            self.writer = tf.summary.create_file_writer(self.logdir, filename_suffix=self.writer_comment)
 
-    def save_models(self, name: str, path: str=None, include_optimizer=True):
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+        self.save_config()
+
+    def save_config(self):
+        """Save the agent's config to self.logdir/config.yml"""
+        config = {}
+        for key, value in self.__dict__.items():
+            if key in ["actor", "critic", "optimizer", "writer"]:
+                continue
+
+            config[key] = value
+
+        with open(self.logdir + "/config.yaml", "w") as f:
+            yaml.dump(config, f)
+
+        # save config to tensorboard, for easy viewing
+        if self.writer:
+            with self.writer.as_default():
+                for key, value in config.items():
+                    tf.summary.text(key, str(value), step=0)
+
+    def save_models(self, name: str, path: str=None, include_optimizer=False):
         """Save actor and critic models. By default, saves to self.logdir.
         
         Args:
@@ -88,14 +116,26 @@ class PPOAgent:
             include_optimizer (bool, optional): Whether to save the optimizer state. Defaults to True.
         """
         path = path or self.logdir
-        self.actor.save(path + f"/{name}_actor.h5", include_optimizer=include_optimizer)
-        self.critic.save(path + f"/{name}_critic.h5", include_optimizer=include_optimizer)
+        if path:
+            self.actor.save(path + f"/{name}_actor.h5", include_optimizer=include_optimizer)
+            self.critic.save(path + f"/{name}_critic.h5", include_optimizer=include_optimizer)
 
     def critic_loss(self, y_pred: tf.Tensor, target: tf.Tensor) -> tf.Tensor:
         """ Mean Squared Error loss for critic"""
         y_pred = tf.squeeze(y_pred)
         target = tf.squeeze(target)
-        loss = K.mean((y_pred - target) ** 2)
+        # loss = K.mean((y_pred - target) ** 2)
+
+        v_loss_unclipped = (y_pred - target) ** 2
+        v_clipped = target + K.clip(
+            y_pred - target,
+            -self.loss_clipping,
+            self.loss_clipping
+        )
+        v_loss_clipped = (v_clipped - target) ** 2
+        v_loss_max = K.maximum(v_loss_unclipped, v_loss_clipped)
+        loss = K.mean(v_loss_max)
+
         return loss
     
     def logprob_dist(self, probs: tf.Tensor, actions: tf.Tensor) -> typing.Tuple[tf.Tensor, tf.Tensor]:
@@ -107,8 +147,9 @@ class PPOAgent:
         log_probs = K.log(probs + 1e-10)
 
         entropy = -K.mean(probs * K.log(probs + 1e-10))
+        sigma = 1 - K.mean(probs)
 
-        return log_probs, entropy
+        return log_probs, entropy, sigma
     
     def logprob_dist_continuous(self, probs: tf.Tensor, actions: tf.Tensor) -> typing.Tuple[tf.Tensor, tf.Tensor]:
         """ Compute log probability of actions given the distribution, and the entropy of the distribution.
@@ -119,32 +160,40 @@ class PPOAgent:
         probs_size = tf.cast(probs.shape[-1] / 2, tf.int32)
         mu, sigma = probs[:, :probs_size], probs[:, probs_size:]
 
-        # compute the exponent of the gaussian dist
-        exponent = -0.5 * K.square(actions - mu) / K.square(sigma)
-        # compute log coefficient
-        log_coeff = -0.5 * K.log(2.0 * np.pi * K.square(sigma))
-        # compute log probability
-        log_prob = log_coeff + exponent
+        dist = tfp.distributions.Normal(mu, sigma)
+        log_prob = dist.log_prob(actions)
         log_prob = tf.reduce_sum(log_prob, axis=1)
+        entropy = dist.entropy()
+        entropy = K.mean(entropy)
 
-        # compute entropy
-        entropy_coeff = 0.5 * K.log(2.0 * np.pi * np.e * K.square(sigma))
-        entropy = tf.reduce_sum(entropy_coeff, axis=1)
-        entropy = -K.mean(entropy)
+        # # compute the exponent of the gaussian dist
+        # exponent = -0.5 * K.square(actions - mu) / K.square(sigma)
+        # # compute log coefficient
+        # log_coeff = -0.5 * K.log(2.0 * np.pi * K.square(sigma))
+        # # compute log probability
+        # log_prob_ = log_coeff + exponent
+        # log_prob_ = tf.reduce_sum(log_prob_, axis=1)
 
-        return log_prob, entropy
+        # # compute entropy
+        # entropy_coeff = 0.5 * K.log(2.0 * np.pi * np.e * K.square(sigma))
+        # entropy = tf.reduce_sum(entropy_coeff, axis=1)
+        # entropy = -K.mean(entropy)
+        # entropy = K.mean(entropy)
+
+        return log_prob, entropy, sigma
 
     def actor_loss(self, probs, advantages, old_probs, actions) -> typing.Tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
         """ Compute actor loss. Returns loss, entropy, and approx_kl_divergence.
         PPO actor loss defined in https://arxiv.org/abs/1707.06347
         """
         if self.action_space == "discrete":
-            log_prob, entropy = self.logprob_dist(probs, actions)
-            log_old_prob, _ = self.logprob_dist(old_probs, actions)
+            log_prob, entropy, sigma = self.logprob_dist(probs, actions)
+            log_old_prob, _, _ = self.logprob_dist(old_probs, actions)
 
         elif self.action_space == "continuous":
-            log_prob, entropy = self.logprob_dist_continuous(probs, actions)
-            log_old_prob, _ = self.logprob_dist_continuous(old_probs, actions)
+            log_prob, entropy, sigma = self.logprob_dist_continuous(probs, actions)
+            log_old_prob, _, _ = self.logprob_dist_continuous(old_probs, actions)
+            sigma = K.mean(sigma)
 
         log_ratio = log_prob - log_old_prob
         ratio = K.exp(log_ratio)
@@ -154,9 +203,9 @@ class PPOAgent:
 
         loss = -K.mean(K.minimum(p1, p2))
 
-        approx_kl_divergence = K.mean((K.exp(log_ratio) - 1) - log_ratio)
+        approx_kl_divergence = K.mean((ratio - 1) - log_ratio)
 
-        return loss, entropy, approx_kl_divergence
+        return loss, entropy, approx_kl_divergence, sigma
 
     def act(self, state: np.ndarray) -> typing.Tuple[np.ndarray, np.ndarray]:
         state_dim = state.ndim
@@ -204,7 +253,6 @@ class PPOAgent:
         rewards = np.array(rewards, dtype=np.float32)
         dones = 1 - np.array(dones, dtype=np.float32)
         gaes = rewards + gamma * next_values * dones - values
-        # gaes = np.copy(deltas) 
         for t in reversed(range(len(gaes) - 1)):
             update = dones[t] * gamma * lamda * gaes[t + 1]
             gaes[t] = gaes[t] + update
@@ -238,27 +286,27 @@ class PPOAgent:
         return tf.concat(predictions, axis=0)
     
     def reduce_learning_rate(self, ratio: int = 0.95, verbose: bool = True, min_lr: float = 1e-06):
-        if float(self.actor.optimizer.lr.numpy()) > min_lr:
-            self.actor.optimizer.lr = self.actor.optimizer.lr * ratio
+        if self.learning_rate > min_lr:
+            self.learning_rate *= ratio
+            self.optimizer.lr = self.learning_rate
             if verbose: 
-                print(f"Reduced learning rate to Actor: {self.actor.optimizer.lr.numpy()}")
-        if float(self.critic.optimizer.lr.numpy()) > min_lr:
-            self.critic.optimizer.lr = self.critic.optimizer.lr * ratio
-            if verbose: 
-                print(f"Reduced learning rate to Critic: {self.critic.optimizer.lr.numpy()}")
+                print(f"Reduced learning rate to {self.learning_rate}")
 
-            
+    def log_to_writer(self, data: dict):
+        if self.writer:
+            with self.writer.as_default():
+                for key, value in data.items():
+                    tf.summary.scalar(key, value, step = self.epoch)
+
+                self.writer.flush()
+
     def custom_logger(self, history: dict) -> dict:
         for key, value in history.items():
             history[key] = np.mean(value)
 
-        history["actor_lr"] = self.actor.optimizer.lr.numpy()
-        history["critic_lr"] = self.critic.optimizer.lr.numpy()
+        history["lr"] = self.optimizer.lr.numpy()
 
-        if self.writer:
-            with self.writer.as_default():
-                for key, value in history.items():
-                    tf.summary.scalar(key, value, step = self.epoch)
+        self.log_to_writer(history)
 
         history["epoch"] = self.epoch
         self.epoch += 1
@@ -271,7 +319,12 @@ class PPOAgent:
         """
         def wrapper(self, data):
             history = {}
-            for _ in range(self.train_epochs):
+            for epoch in range(self.train_epochs):
+
+                if self.train_epochs_annealing:
+                    # Reduce learning rate for each epoch in total number of epochs
+                    frac = 1.0 - epoch  / self.train_epochs
+                    self.optimizer.lr = self.learning_rate * frac
 
                 for i in range(0, data[0].shape[0], self.batch_size):
                     batch_data = [d[i:i+self.batch_size] for d in data]
@@ -284,8 +337,20 @@ class PPOAgent:
 
         return wrapper
 
+    def clip_gradients(self, gradients: list, grad_clip_value: float = 0.5) -> list:
+        if grad_clip_value is None:
+            return gradients
+        # Defuse inf gradients (due to super large losses). This is a hack to make the model more stable.
+        cliped_grads, _ = tf.clip_by_global_norm(gradients, grad_clip_value)
+        # If the global_norm is inf -> All grads will be NaN. Stabilize this
+        # here by setting them to 0.0. This will simply ignore destructive loss
+        # calculations.
+        grads_no_nan = [tf.where(tf.math.is_nan(g), tf.zeros_like(g), g) for g in cliped_grads]
+
+        return grads_no_nan
+    
     @train_step_wrapper
-    @tf.function
+    # @tf.function
     def train_step(self, data) -> dict:
         states, advantages, old_probs, actions, target = data
 
@@ -298,31 +363,33 @@ class PPOAgent:
             actions = tf.gather(actions, indices)
             target = tf.gather(target, indices)
 
-        with tf.GradientTape() as tape1, tf.GradientTape() as tape2:
+        # with tf.GradientTape() as tape1, tf.GradientTape() as tape2:
+        with tf.GradientTape() as tape:
             probs = self.actor(states, training=True)  # Forward pass
             values = self.critic(states, training=True)
 
             # Compute the actor loss value
-            actor_loss, entropy, approx_kl_div = self.actor_loss(probs, advantages, old_probs, actions)
+            actor_loss, entropy, approx_kl_div, sigma = self.actor_loss(probs, advantages, old_probs, actions)
             # Compute the critic loss value
             critic_loss = self.critic_loss(values, target) * self.c1
             # Compute the entropy loss value
             entropy_loss = entropy * self.c2
 
-            # Compute actor gradients
-            grads_actor = tape1.gradient(actor_loss + entropy_loss, self.actor.trainable_variables)
-            self.actor.optimizer.apply_gradients(zip(grads_actor, self.actor.trainable_variables))
+            # Compute the total loss value
+            # summing actor_loss, critic_loss and entropy_loss to get loss
+            # adding approx_kl_div to loss to prevent old probs getting too far from new probs
+            loss = actor_loss + entropy_loss + critic_loss + approx_kl_div * self.kl_coeff
+            grads = tape.gradient(loss, self.actor.trainable_variables + self.critic.trainable_variables)
+            grads = self.clip_gradients(grads, self.grad_clip_value)
+            self.optimizer.apply_gradients(zip(grads, self.actor.trainable_variables + self.critic.trainable_variables))
 
-            # Compute critic gradients
-            grads_critic = tape2.gradient(critic_loss, self.critic.trainable_variables)
-            self.critic.optimizer.apply_gradients(zip(grads_critic, self.critic.trainable_variables))
+        results = {"loss": loss, "a_loss": actor_loss, "c_loss": critic_loss, "entropy": entropy, "kl_div": approx_kl_div, "sigma": sigma}
 
-        return {"a_loss": actor_loss, "c_loss": critic_loss, "entropy": entropy, "kl_div": approx_kl_div}
+        return results
 
     def train(self, states, actions, rewards, old_probs, dones, next_state) -> dict:
         # reshape memory to appropriate shape for training
         old_probs = np.array(old_probs)
-        # all_states = np.concatenate([states, [next_state]], axis=0)
         all_states = np.array(states + [next_state])
         states = np.array(states)
         actions = np.array(actions)
@@ -334,21 +401,8 @@ class PPOAgent:
         # Compute discounted rewards and advantages
         advantages, target = self.get_gaes(rewards, dones, values, next_values, gamma=self.gamma, lamda=self.lamda, normalize=True)
         
-        if self.writer:
-            with self.writer.as_default():
-                tf.summary.scalar("rewards", np.sum(rewards), step = self.epoch)
-
-        # shuffle = np.arange(states.shape[0])
-        # np.random.shuffle(shuffle)
-        # states = states[shuffle]
-        # advantages = advantages[shuffle]
-        # old_probs = old_probs[shuffle]
-        # actions = actions[shuffle]
-        # target = target[shuffle]
+        self.log_to_writer({"rewards": np.sum(rewards)})
 
         history = self.train_step((states, advantages, old_probs, actions, target))
-
-        # Clear TensorFlow sessions
-        # tf.keras.backend.clear_session()
 
         return history

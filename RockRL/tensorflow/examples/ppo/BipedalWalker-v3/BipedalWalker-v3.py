@@ -1,10 +1,10 @@
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import gym
 # visible only one gpu
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import numpy as np
 import tensorflow as tf
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 for gpu in tf.config.experimental.list_physical_devices('GPU'):
     tf.config.experimental.set_memory_growth(gpu, True)
 from keras.models import Model, load_model
@@ -34,6 +34,7 @@ def critic_model(input_shape):
     X = layers.Dense(512, activation="relu")(X_input)
     X = layers.Dense(256, activation="relu")(X)
     X = layers.Dense(64, activation="relu")(X)
+
     value = layers.Dense(1, activation=None)(X)
 
     model = Model(inputs = X_input, outputs = value)
@@ -44,34 +45,29 @@ if __name__ == "__main__":
     env_name = 'BipedalWalker-v3'
 
     num_envs = 48
-    env = VectorizedEnv(env_object=gym.make, num_envs=num_envs, id=env_name) # , render_mode="human")
+    env = VectorizedEnv(env_object=gym.make, num_envs=num_envs, id=env_name)
     action_space = env.action_space.shape[0]
     input_shape = env.observation_space.shape
 
     agent = PPOAgent(
         actor = actor_model(input_shape, action_space),
         critic = critic_model(input_shape),
-        actor_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0003),
-        critic_optimizer=tf.keras.optimizers.Adam(learning_rate=0.0003),
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
         action_space="continuous",
-        batch_size=256,
+        batch_size=512,
         train_epochs=10,
         gamma=0.99,
         lamda=0.90,
-        c2=0.001,
-        compile=True,
+        c2=0.01,
+        writer_comment=env_name,
     )
     agent.actor.summary()
 
     memory = Memory(num_envs=num_envs, input_shape=input_shape)
     meanAverage = MeanAverage(
         window_size=100,
-        best_mean_score=-np.inf,
-        best_mean_score_episode=200,
     )
     states = env.reset()
-    reduce_lr_episode = 200
-    wait_best_window = 100
     episodes = 10000
     episode = 0
     while True:
@@ -95,13 +91,6 @@ if __name__ == "__main__":
             if meanAverage.is_best(episode):
                 # save model
                 agent.save_models(env_name)
-
-                if meanAverage.best_mean_score_episode > reduce_lr_episode:
-                    reduce_lr_episode = meanAverage.best_mean_score_episode + wait_best_window
-
-            if reduce_lr_episode < episode:
-                agent.reduce_learning_rate(ratio=0.95, verbose=True, min_lr = 5e-06)
-                reduce_lr_episode = episode + wait_best_window
 
             print(episode, score, mean, len(_rewards), meanAverage.best_mean_score, meanAverage.best_mean_score_episode)
 
