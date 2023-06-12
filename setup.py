@@ -1,5 +1,5 @@
 import os
-from setuptools import setup
+from setuptools import setup, find_packages
 
 DIR = os.path.abspath(os.path.dirname(__file__))
 
@@ -30,7 +30,7 @@ def get_version(initpath: str) -> str:
 
 setup(
     name = 'rockrl',
-    version = get_version("RockRL/__init__.py"),
+    version = get_version("rockrl/__init__.py"),
     long_description = long_description,
     long_description_content_type = 'text/markdown',
     url='https://pylessons.com/',
@@ -38,8 +38,10 @@ setup(
     author_email='pythonlessons0@gmail.com',
     install_requires=requirements,
     python_requires='>=3',
-    packages = ['RockRL'],
+    packages = find_packages(exclude=['*.pyc']),
     include_package_data=True,
+    # package_data={'rockrl': ['**/**/*', '**/**/**/*', '**/**/**/**/*']},
+    # package_data={'rockrl': ['**']},
     project_urls={
         'Source': 'https://github.com/pythonlessons/RockRL/',
         'Tracker': 'https://github.com/pythonlessons/RockRL/issues',

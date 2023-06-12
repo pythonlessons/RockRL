@@ -25,6 +25,9 @@ class CustomEnv:
     def close(self):
         self.env.close()
 
+    def render(self, **kwargs):
+        return self.env.render(**kwargs)
+
 
 def run_env(conn, env_object, kwargs):
     env = env_object(**kwargs)
@@ -101,3 +104,4 @@ class VectorizedEnv:
         for conn, env in zip(self.conns, self.envs):
             conn[0].send('close')
             env.join()
+            env.close()

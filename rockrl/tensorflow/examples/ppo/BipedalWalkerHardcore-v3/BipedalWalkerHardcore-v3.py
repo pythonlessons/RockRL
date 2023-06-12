@@ -8,10 +8,10 @@ for gpu in tf.config.experimental.list_physical_devices('GPU'):
 from keras.models import Model, load_model
 from keras import layers
 
-from RockRL.utils.vectorizedEnv import VectorizedEnv
-from RockRL.utils.misc import MeanAverage
-from RockRL.utils.memory import Memory
-from RockRL.tensorflow import PPOAgent
+from rockrl.utils.vectorizedEnv import VectorizedEnv
+from rockrl.utils.misc import MeanAverage
+from rockrl.utils.memory import Memory
+from rockrl.tensorflow import PPOAgent
 
 def actor_model(input_shape, action_space):
     X_input = layers.Input(input_shape)
@@ -61,8 +61,8 @@ if __name__ == "__main__":
         train_epochs=10,
         gamma=0.99,
         lamda=0.90,
-        c2=0.1,
-        kl_coeff=0.02,
+        c2=0.01,
+        kl_coeff=0.2,
         shuffle=True,
         writer_comment=env_name,
     )

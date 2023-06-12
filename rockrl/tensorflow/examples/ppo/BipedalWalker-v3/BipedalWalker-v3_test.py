@@ -1,5 +1,4 @@
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import gym
 # visible only one gpu
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -9,18 +8,19 @@ for gpu in tf.config.experimental.list_physical_devices('GPU'):
     tf.config.experimental.set_memory_growth(gpu, True)
 from keras.models import Model, load_model
 
-from RockRL.utils.vectorizedEnv import VectorizedEnv, CustomEnv
-from RockRL.utils.memory import Memory
+from rockrl.utils.vectorizedEnv import VectorizedEnv
+from rockrl.utils.memory import Memory
+
 
 if __name__ == "__main__":
-    env_name = 'BipedalWalkerHardcore-v3'
+    env_name = 'BipedalWalker-v3'
 
     num_envs = 4
-    env = VectorizedEnv(env_object=CustomEnv, custom_env_object=gym.make, os_hist_steps=4, num_envs=num_envs, id=env_name, render_mode="human")
+    env = VectorizedEnv(env_object=gym.make, num_envs=num_envs, id=env_name, render_mode="human")
     action_space = env.action_space.shape[0]
     input_shape = env.observation_space.shape
 
-    actor = load_model("runs/1685710641/BipedalWalkerHardcore-v3_actor.h5", compile=False)
+    actor = load_model("runs/1686059965/BipedalWalker-v3_actor.h5", compile=False)
     actor.summary()
 
     memory = Memory(num_envs=num_envs, input_shape=input_shape)
