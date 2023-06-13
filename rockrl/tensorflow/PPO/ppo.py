@@ -207,7 +207,7 @@ class PPOAgent:
 
         return loss, entropy, approx_kl_divergence, sigma
 
-    def act(self, state: np.ndarray) -> typing.Tuple[np.ndarray, np.ndarray]:
+    def act(self, state: np.ndarray, test: bool = False) -> typing.Tuple[np.ndarray, np.ndarray]:
         state_dim = state.ndim
         if state_dim < len(self.actor.input_shape):
             state = np.expand_dims(state, axis=0)
@@ -215,13 +215,20 @@ class PPOAgent:
         # Use the network to predict the next action to take, using the model
         probs = self.actor(state, training=False).numpy()
         if self.action_space == "discrete":
-            actions = np.array([np.random.choice(prob.shape[0], p=prob) for prob in probs])
+            # in discrete action space, the network outputs a probability distribution over the actions
+            if not test:
+                actions = np.array([np.random.choice(prob.shape[0], p=prob) for prob in probs])
+            else:
+                actions = np.argmax(probs, axis=1)
 
         elif self.action_space == "continuous":
             # in continuous action space, the network outputs mean and sigma should be concatenated
             probs_size = int(probs.shape[-1] / 2)
             a_probs, sigma = probs[:, :probs_size], probs[:, probs_size:]
-            actions = np.random.normal(a_probs, sigma)
+            if not test:
+                actions = np.random.normal(a_probs, sigma)
+            else:
+                actions = a_probs
     
         if state_dim < len(self.actor.input_shape):
             return actions[0], probs[0]
