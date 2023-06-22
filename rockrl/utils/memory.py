@@ -53,8 +53,9 @@ class Memory:
     def done_indices(self, max_episode_steps: int = None) -> list:
         """ Returns the indices of the environments that are done (either by reaching the max episode steps or by the environment itself)"""
         done_indices = np.array([env for env in range(self.num_envs) if self.dones[env][-1]]).astype(np.int32)
-        max_episode_envs = np.where(self.lengths() >= max_episode_steps)[0]
-        if max_episode_envs.any():
-            done_indices = np.unique(np.concatenate((done_indices, max_episode_envs))).astype(np.int32)
+        if max_episode_steps is not None:
+            max_episode_envs = np.where(self.lengths() >= max_episode_steps)[0]
+            if max_episode_envs.any():
+                done_indices = np.unique(np.concatenate((done_indices, max_episode_envs))).astype(np.int32)
 
         return done_indices.tolist()

@@ -413,3 +413,9 @@ class PPOAgent:
         history = self.train_step((states, advantages, old_probs, actions, target))
 
         return history
+    
+    def summary(self, actor=True, critic=True):
+        if actor: 
+            self.actor.summary()
+        if critic:
+            self.critic.summary()

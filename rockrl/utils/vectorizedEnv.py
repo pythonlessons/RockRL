@@ -51,8 +51,8 @@ def run_env(conn, env_object, kwargs):
         else:
             # Assume it's an action
             action = message
-            state, reward, done = env.step(action)[:3]
-            conn[1].send((state, reward, done))
+            state, reward, done, info = env.step(action)[:4]
+            conn[1].send((state, reward, done, info))
 
 
 class VectorizedEnv:
@@ -85,9 +85,9 @@ class VectorizedEnv:
             conn[0].send(action)
 
         results = [conn[0].recv() for conn in self.conns]
-        next_states, rewards, dones = zip(*results)
+        next_states, rewards, dones, info = zip(*results)
         
-        return np.array(next_states), np.array(rewards), np.array(dones)
+        return np.array(next_states), np.array(rewards), np.array(dones), info
     
     def render(self, index=None):
         if index is None:
