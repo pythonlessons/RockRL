@@ -98,8 +98,9 @@ class PPOAgent:
 
             config[key] = value
 
-        with open(self.logdir + "/config.yaml", "w") as f:
-            yaml.dump(config, f)
+        if self.logdir:
+            with open(self.logdir + "/config.yaml", "w") as f:
+                yaml.dump(config, f)
 
         # save config to tensorboard, for easy viewing
         if self.writer:

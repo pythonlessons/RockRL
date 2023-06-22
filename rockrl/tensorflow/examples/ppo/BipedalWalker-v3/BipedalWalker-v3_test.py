@@ -33,7 +33,7 @@ if __name__ == "__main__":
         probs_size = int(probs.shape[-1] / 2)
         actions, sigma = probs[:, :probs_size], probs[:, probs_size:]
 
-        next_states, rewards, dones = env.step(actions)
+        next_states, rewards, dones, _ = env.step(actions)
         memory.append(states, actions, rewards, probs, dones, next_states)
         states = next_states
 

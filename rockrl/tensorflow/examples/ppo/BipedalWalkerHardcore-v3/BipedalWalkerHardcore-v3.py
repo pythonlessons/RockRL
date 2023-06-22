@@ -76,7 +76,7 @@ if __name__ == "__main__":
     while True:
         actions, probs = agent.act(states)
 
-        next_states, rewards, dones = env.step(actions)
+        next_states, rewards, dones, _ = env.step(actions)
         memory.append(states, actions, rewards, probs, dones, next_states)
         states = next_states
 
