@@ -40,8 +40,6 @@ setup(
     python_requires='>=3',
     packages = find_packages(exclude=['*.pyc']),
     include_package_data=True,
-    # package_data={'rockrl': ['**/**/*', '**/**/**/*', '**/**/**/**/*']},
-    # package_data={'rockrl': ['**']},
     project_urls={
         'Source': 'https://github.com/pythonlessons/RockRL/',
         'Tracker': 'https://github.com/pythonlessons/RockRL/issues',

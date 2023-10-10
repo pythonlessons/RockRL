@@ -1,36 +1,36 @@
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import gym
+import gymnasium as gym
 # visible only one gpu
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import numpy as np
 import tensorflow as tf
 for gpu in tf.config.experimental.list_physical_devices('GPU'):
     tf.config.experimental.set_memory_growth(gpu, True)
-from keras.models import Model, load_model
+
+from keras import models
 
 if __name__ == "__main__":
     env_name = 'LunarLander-v2'
 
+    # env = gym.make(env_name)
     env = gym.make(env_name, render_mode="human")
 
-    actor = load_model("runs/1686050505/LunarLander-v2_actor.h5", compile=False)
+    actor = models.load_model("runs/1695976917/LunarLander-v2_actor.h5", compile=False)
     actor.summary()
 
-    states = env.reset()[0]
-    episodes = 100
-    score = 0
-    episode = 0
+    state, info = env.reset()
+    episodes, episode, score = 100, 0, 0
     while True:
-        a = env.render()
-        probs = actor.predict(np.expand_dims(states, axis=0), verbose=False)
-        actions = np.argmax(probs, axis=1)[0]
+        probs = actor.predict(np.expand_dims(state, axis=0), verbose=False)
+        action = np.argmax(probs, axis=1)[0]
 
-        states, rewards, dones = env.step(actions)[:3]
-        score += rewards
+        state, reward, terminated, truncated, info = env.step(action)
+        score += reward
+        env.render()
 
-        if dones:
-            states = env.reset()[0]
+        if terminated or truncated:
+            state, info = env.reset()
 
             episode += 1
             print(episode, score)

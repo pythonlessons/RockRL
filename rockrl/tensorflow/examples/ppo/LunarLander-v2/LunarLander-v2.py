@@ -1,38 +1,37 @@
 import os
-import gym
+import gymnasium as gym
 # visible only one gpu
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-import numpy as np
 import tensorflow as tf
 for gpu in tf.config.experimental.list_physical_devices('GPU'):
     tf.config.experimental.set_memory_growth(gpu, True)
-from keras.models import Model
-from keras.layers import Input, Dense
+
+from keras import models, layers
 
 from rockrl.utils.vectorizedEnv import VectorizedEnv
 from rockrl.utils.misc import MeanAverage
-from rockrl.utils.memory import Memory
+from rockrl.utils.memory import MemoryManager
 from rockrl.tensorflow import PPOAgent
 
 
 def actor_model(input_shape, action_space):
-    X_input = Input(input_shape)
-    X = Dense(512, activation='relu')(X_input)
-    X = Dense(256, activation='relu')(X)
-    X = Dense(64, activation='relu')(X)
-    output = Dense(action_space, activation="softmax")(X)
+    X_input = layers.Input(input_shape)
+    X = layers.Dense(512, activation='relu')(X_input)
+    X = layers.Dense(256, activation='relu')(X)
+    X = layers.Dense(64, activation='relu')(X)
+    output = layers.Dense(action_space, activation="softmax")(X)
 
-    model = Model(inputs = X_input, outputs = output)
+    model = models.Model(inputs = X_input, outputs = output)
     return model
 
 def critic_model(input_shape):
-    X_input = Input(input_shape)
-    X = Dense(512, activation="relu")(X_input)
-    X = Dense(256, activation="relu")(X)
-    X = Dense(64, activation="relu")(X)
-    value = Dense(1, activation=None)(X)
+    X_input = layers.Input(input_shape)
+    X = layers.Dense(512, activation="relu")(X_input)
+    X = layers.Dense(256, activation="relu")(X)
+    X = layers.Dense(64, activation="relu")(X)
+    value = layers.Dense(1, activation=None)(X)
 
-    model = Model(inputs = X_input, outputs = value)
+    model = models.Model(inputs = X_input, outputs = value)
     return model
 
 
@@ -54,35 +53,31 @@ if __name__ == "__main__":
         writer_comment=env_name,
     )
 
-    memory = Memory(num_envs=num_envs, input_shape=input_shape)
+    memory = MemoryManager(num_envs=num_envs)
     meanAverage = MeanAverage()
-    states = env.reset()
+    states, _ = env.reset()
     episodes = 10000
-    episode = 0
     while True:
         actions, probs = agent.act(states)
 
-        next_states, rewards, dones, _ = env.step(actions)
-        memory.append(states, actions, rewards, probs, dones, next_states)
+        next_states, rewards, terminateds, truncateds, infos = env.step(actions)
+        memory.append(states, actions, rewards, probs, terminateds, truncateds, next_states, infos)
         states = next_states
 
-        for index in memory.done_indices(env._max_episode_steps):
-            _states, _actions, _rewards, _predictions, _dones, _next_state = memory.get(index=index)
-            agent.train(_states, _actions, _rewards, _predictions, _dones, _next_state)
-            memory.reset(index=index)
-            states[index] = env.reset(index)
+        for index in memory.done_indices():
+            env_memory = memory[index]
+            agent.train(env_memory)
+            states[index], _ = env.reset(index)
 
-            episode += 1
-            score = np.sum(_rewards)
-            mean = meanAverage(score)
+            mean = meanAverage(env_memory.score)
 
-            if meanAverage.is_best(episode):
+            if meanAverage.is_best(agent.epoch):
                 # save model
                 agent.save_models(env_name)
 
-            print(episode, score, mean, len(_rewards), meanAverage.best_mean_score, meanAverage.best_mean_score_episode)
+            print(agent.epoch, env_memory.score, mean, len(env_memory), meanAverage.best_mean_score, meanAverage.best_mean_score_episode)
 
-        if episode >= episodes:
+        if agent.epoch >= episodes:
             break
 
     env.close()

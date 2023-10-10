@@ -6,6 +6,8 @@ import numpy as np
 import tensorflow as tf
 from keras import backend as K
 
+from rockrl.utils.memory import Memory
+
 import tensorflow_probability as tfp
 
 class PPOAgent:
@@ -209,6 +211,9 @@ class PPOAgent:
         return loss, entropy, approx_kl_divergence, sigma
 
     def act(self, state: np.ndarray, test: bool = False) -> typing.Tuple[np.ndarray, np.ndarray]:
+        if not isinstance(state, np.ndarray):
+            state = np.array(state)
+
         state_dim = state.ndim
         if state_dim < len(self.actor.input_shape):
             state = np.expand_dims(state, axis=0)
@@ -346,7 +351,7 @@ class PPOAgent:
         return wrapper
 
     def clip_gradients(self, gradients: list, grad_clip_value: float = 0.5) -> list:
-        if grad_clip_value is None:
+        if grad_clip_value is None or not isinstance(grad_clip_value, float):
             return gradients
         # Defuse inf gradients (due to super large losses). This is a hack to make the model more stable.
         cliped_grads, _ = tf.clip_by_global_norm(gradients, grad_clip_value)
@@ -358,7 +363,7 @@ class PPOAgent:
         return grads_no_nan
     
     @train_step_wrapper
-    # @tf.function
+    @tf.function
     def train_step(self, data) -> dict:
         states, advantages, old_probs, actions, target = data
 
@@ -395,8 +400,9 @@ class PPOAgent:
 
         return results
 
-    def train(self, states, actions, rewards, old_probs, dones, next_state) -> dict:
+    def train(self, memory: Memory) -> dict:
         # reshape memory to appropriate shape for training
+        states, actions, rewards, old_probs, dones, truncateds, next_state, infos = memory.get()
         old_probs = np.array(old_probs)
         all_states = np.array(states + [next_state])
         states = np.array(states)

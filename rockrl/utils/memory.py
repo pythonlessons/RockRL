@@ -1,61 +1,66 @@
 import numpy as np
 
 class Memory:
+    """ Memory class for storing the experiences of the agent
+    """
+    def __init__(self):
+        self._reset = True
+        
+    def reset(self):
+        self.states = []
+        self.actions = []
+        self.rewards = []
+        self.predictions = []
+        self.terminateds = []
+        self.truncateds = []
+        self.next_state = None
+        self.infos = []
+
+        self._reset = False
+
+    def __len__(self):
+        return len(self.rewards)
+    
+    @property
+    def score(self):
+        return np.sum(self.rewards)
+
+    def append(self, state, action, reward, prediction, terminated, truncated, next_state, info: dict={}):
+        if self._reset:
+            self.reset()
+
+        self.states.append(state)
+        self.actions.append(action)
+        self.rewards.append(reward)
+        self.predictions.append(prediction)
+        self.terminateds.append(terminated)
+        self.truncateds.append(truncated)
+        self.next_state = next_state
+        self.infos.append(info)
+
+    def get(self, reset=True):
+        self._reset = reset
+
+        return self.states, self.actions, self.rewards, self.predictions, self.terminateds, self.truncateds, self.next_state, self.infos
+    
+    @property
+    def done(self):
+        return self.terminateds[-1] or self.truncateds[-1]
+
+class MemoryManager:
     """ Memory class for storing the experiences of the agent in multiple environments
     """
-    def __init__(self, input_shape, num_envs=1):
-        self.input_shape = input_shape
+    def __init__(self, num_envs: int):
         self.num_envs = num_envs
-        self.reset()
+        self.memory = [Memory() for _ in range(num_envs)]
 
-    def reset(self, index=None):
-        if index is None:
-            self.states = [[] for _ in range(self.num_envs)]
-            self.actions = [[] for _ in range(self.num_envs)]
-            self.rewards = [[] for _ in range(self.num_envs)]
-            self.predictions = [[] for _ in range(self.num_envs)]
-            self.dones = [[] for _ in range(self.num_envs)]
-            self.next_states = [None for _ in range(self.num_envs)]
-
-        else:
-            self.states[index] = []
-            self.actions[index] = []
-            self.rewards[index] = []
-            self.predictions[index] = []
-            self.dones[index] = []
-            self.next_states[index] = None
-
-    def append(self, states, actions, rewards, predictions, dones, next_states):
-        # check whether the input is dimensioned for one or multiple environments
-        if states.ndim == len(self.input_shape):
-            states, actions, rewards, predictions, dones, next_states = [[x] for x in [states, actions, rewards, predictions, dones, next_states]]
-
+    def append(self, *kwargs):
+        data = list(zip(*kwargs))
         for i in range(self.num_envs):
-            self.states[i].append(states[i])
-            self.actions[i].append(actions[i])
-            self.rewards[i].append(rewards[i])
-            self.predictions[i].append(predictions[i])
-            self.dones[i].append(dones[i])
-            self.next_states[i] = next_states[i]
+            self.memory[i].append(*data[i])
 
-    def get(self, index: int=None):
-        if self.num_envs == 1:
-            return self.states[0], self.actions[0], self.rewards[0], self.predictions[0], self.dones[0], self.next_states[0]
-        
-        if index is None:
-            raise ValueError("Must provide indexes when using multiple environments")
-        return self.states[index], self.actions[index], self.rewards[index], self.predictions[index], self.dones[index], self.next_states[index]
-    
-    def lengths(self) -> np.ndarray:
-        """ Returns the lengths of the episodes in the memory for each environment"""
-        return np.array([len(r) for r in self.rewards]).astype(np.int32)
-    
-    def done_indices(self, max_episode_steps: int = None) -> list:
-        """ Returns the indices of the environments that are done (either by reaching the max episode steps or by the environment itself)"""
-        done_indices = np.array([env for env in range(self.num_envs) if self.dones[env][-1]]).astype(np.int32)
-        if max_episode_steps is not None:
-            max_episode_envs = np.where(self.lengths() >= max_episode_steps)[0]
-            if max_episode_envs.any():
-                done_indices = np.unique(np.concatenate((done_indices, max_episode_envs))).astype(np.int32)
+    def __getitem__(self, index: int):
+        return self.memory[index]
 
-        return done_indices.tolist()
+    def done_indices(self):
+        return [env for env in range(self.num_envs) if self.memory[env].done]

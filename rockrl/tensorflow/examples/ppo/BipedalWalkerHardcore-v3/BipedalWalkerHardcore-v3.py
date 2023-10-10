@@ -1,12 +1,12 @@
 import os
-import gym
+import gymnasium as gym
 os.environ["CUDA_VISIBLE_DEVICES"] = "0" # visible only one gpu
 import numpy as np
 import tensorflow as tf
 for gpu in tf.config.experimental.list_physical_devices('GPU'):
     tf.config.experimental.set_memory_growth(gpu, True)
-from keras.models import Model, load_model
-from keras import layers
+
+from keras import models, layers
 
 from rockrl.utils.vectorizedEnv import VectorizedEnv
 from rockrl.utils.misc import MeanAverage
@@ -26,7 +26,7 @@ def actor_model(input_shape, action_space):
     sigma = layers.Dense(action_space, activation='softplus')(X)
     action_sigma = layers.concatenate([action, sigma])
 
-    model = Model(inputs = X_input, outputs = action_sigma)
+    model = models.Model(inputs = X_input, outputs = action_sigma)
     return model
 
 def critic_model(input_shape):
@@ -40,7 +40,7 @@ def critic_model(input_shape):
 
     value = layers.Dense(1, activation=None)(X)
 
-    model = Model(inputs = X_input, outputs = value)
+    model = models.Model(inputs = X_input, outputs = value)
     return model
 
 

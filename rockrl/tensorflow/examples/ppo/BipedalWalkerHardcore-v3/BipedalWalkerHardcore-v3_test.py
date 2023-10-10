@@ -1,13 +1,14 @@
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import gym
+import gymnasium as gym
 # visible only one gpu
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import numpy as np
 import tensorflow as tf
 for gpu in tf.config.experimental.list_physical_devices('GPU'):
     tf.config.experimental.set_memory_growth(gpu, True)
-from keras.models import Model, load_model
+    
+from keras.models import load_model
 
 from rockrl.utils.vectorizedEnv import VectorizedEnv
 from rockrl.utils.memory import Memory
