@@ -30,7 +30,6 @@ if __name__ == "__main__":
         probs = actor.predict(states, verbose=False)
         actions = np.argmax(probs, axis=-1)
 
-        # state, reward, terminated, truncated, info = env.step(action)
         states, rewards, terminateds, truncateds, infos = env.step(actions)
         env.render()
 
