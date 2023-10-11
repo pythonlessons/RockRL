@@ -16,7 +16,7 @@ if __name__ == "__main__":
     # env = gym.make(env_name)
     env = gym.make(env_name, render_mode="human")
 
-    actor = models.load_model("runs/1695976917/LunarLander-v2_actor.h5", compile=False)
+    actor = models.load_model("runs/1696937445/LunarLander-v2_actor.h5", compile=False)
     actor.summary()
 
     state, info = env.reset()
