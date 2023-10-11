@@ -11,7 +11,7 @@ for gpu in tf.config.experimental.list_physical_devices('GPU'):
 from keras.models import load_model
 
 from rockrl.utils.vectorizedEnv import VectorizedEnv
-from rockrl.utils.memory import Memory
+from rockrl.utils.memory import MemoryManager
 
 if __name__ == "__main__":
     env_name = 'BipedalWalkerHardcore-v3'
@@ -21,12 +21,13 @@ if __name__ == "__main__":
     action_space = env.action_space.shape[0]
     input_shape = env.observation_space.shape
 
-    actor = load_model("runs/1686313794/BipedalWalkerHardcore-v3_actor.h5", compile=False)
+    # actor = load_model("runs/1686313794/BipedalWalkerHardcore-v3_actor.h5", compile=False)
+    actor = load_model("runs/1696962888/BipedalWalkerHardcore-v3_actor.h5", compile=False)
     actor.summary()
 
-    memory = Memory(num_envs=num_envs, input_shape=input_shape)
-    states = env.reset()
-    episodes = 1000
+    memory = MemoryManager(num_envs=num_envs)
+    states, _ = env.reset()
+    episodes = 100
     episode = 0
     while True:
 
@@ -34,18 +35,18 @@ if __name__ == "__main__":
         probs_size = int(probs.shape[-1] / 2)
         actions, sigma = probs[:, :probs_size], probs[:, probs_size:]
 
-        next_states, rewards, dones, _= env.step(actions)
-        memory.append(states, actions, rewards, probs, dones, next_states)
+        next_states, rewards, terminateds, truncateds, infos = env.step(actions)
+        memory.append(states, actions, rewards, probs, terminateds, truncateds, next_states, infos)
         states = next_states
 
-        for index in memory.done_indices(env._max_episode_steps):
-            _states, _actions, _rewards, _predictions, _dones, _next_state = memory.get(index=index)
-            memory.reset(index=index)
-            states[index] = env.reset(index)
+        for index in memory.done_indices():
+            env_memory = memory[index]
+            print(episode, env_memory.score, len(env_memory))
+
+            env_memory.reset()
+            states[index], _ = env.reset(index)
 
             episode += 1
-            score = np.sum(_rewards)
-            print(episode, score, len(_rewards))
 
         if episode >= episodes:
             break
