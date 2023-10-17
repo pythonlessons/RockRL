@@ -160,8 +160,10 @@ class PPOAgent:
         """
         actions = tf.cast(actions, tf.float32)
         # Get probs size from the last dimension of probs, because in actor model, we concatenate mu and sigma
-        probs_size = tf.cast(probs.shape[-1] / 2, tf.int32)
-        mu, sigma = probs[:, :probs_size], probs[:, probs_size:]
+        # probs_size = tf.cast(probs.shape[-1] / 2, tf.int32)
+        # mu, sigma = probs[:, :probs_size], probs[:, probs_size:]
+        mu, sigma = probs[:, :-1], probs[:, -1]
+        sigma = tf.expand_dims(sigma, -1)
 
         dist = tfp.distributions.Normal(mu, sigma)
         log_prob = dist.log_prob(actions)
@@ -229,10 +231,11 @@ class PPOAgent:
 
         elif self.action_space == "continuous":
             # in continuous action space, the network outputs mean and sigma should be concatenated
-            probs_size = int(probs.shape[-1] / 2)
-            a_probs, sigma = probs[:, :probs_size], probs[:, probs_size:]
+            # probs_size = int(probs.shape[-1] / 2)
+            # a_probs, sigma = probs[:, :probs_size], probs[:, probs_size:]
+            a_probs, sigma = probs[:, :-1], probs[:, -1]
             if not test:
-                actions = np.random.normal(a_probs, sigma)
+                actions = np.random.normal(a_probs, np.expand_dims(sigma, -1))
             else:
                 actions = a_probs
     
@@ -341,7 +344,7 @@ class PPOAgent:
 
                 for i in range(0, data[0].shape[0], self.batch_size):
                     batch_data = [d[i:i+self.batch_size] for d in data]
-                    history_step = func(self, batch_data)
+                    history_step = func(self, batch_data) # call train_step function on batch data
 
                     for key, value in history_step.items():
                         history[key] = history.get(key, []) + [value.numpy()]
@@ -391,7 +394,8 @@ class PPOAgent:
             # Compute the total loss value
             # summing actor_loss, critic_loss and entropy_loss to get loss
             # adding approx_kl_div to loss to prevent old probs getting too far from new probs
-            loss = actor_loss + entropy_loss + critic_loss + approx_kl_div * self.kl_coeff
+            kl_error = approx_kl_div * self.kl_coeff if approx_kl_div >= self.kl_coeff else 0.0
+            loss = actor_loss + entropy_loss + critic_loss + kl_error
             grads = tape.gradient(loss, self.actor.trainable_variables + self.critic.trainable_variables)
             grads = self.clip_gradients(grads, self.grad_clip_value)
             self.optimizer.apply_gradients(zip(grads, self.actor.trainable_variables + self.critic.trainable_variables))
@@ -401,7 +405,10 @@ class PPOAgent:
         return results
 
     def train(self, memory: Memory) -> dict:
-        # reshape memory to appropriate shape for training
+        if not isinstance(memory, Memory):
+            raise TypeError("memory must be an instance of Memory object")
+
+        # Get and reshape memory to appropriate shape for training
         states, actions, rewards, old_probs, dones, truncateds, next_state, infos = memory.get()
         old_probs = np.array(old_probs)
         all_states = np.array(states + [next_state])

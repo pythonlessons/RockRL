@@ -1,9 +1,9 @@
 # RockRL
-Reinforcement Learning library for public, for now, it only supports TensorFlow.
+Reinforcement Learning library for public, for now, it only supports **TensorFlow**.
 
 # Installation
 ```bash
-pip install RockRL
+pip install rockrl
 ```
 
 # Environment requirements

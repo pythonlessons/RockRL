@@ -22,7 +22,8 @@ def actor_model(input_shape, action_space):
     X = layers.Dense(64, activation='relu')(X)
 
     action = layers.Dense(action_space, activation="tanh")(X)
-    sigma = layers.Dense(action_space, activation='softplus')(X)
+    sigma = layers.Dense(action_space)(X)
+    sigma = layers.Dense(1, activation='sigmoid')(sigma)
     action_sigma = layers.concatenate([action, sigma])
 
     model = models.Model(inputs = X_input, outputs = action_sigma)
@@ -51,14 +52,17 @@ if __name__ == "__main__":
     agent = PPOAgent(
         actor = actor_model(input_shape, action_space),
         critic = critic_model(input_shape),
-        optimizer=tf.keras.optimizers.Adam(learning_rate=0.0003),
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
         action_space="continuous",
         batch_size=512,
         train_epochs=10,
         gamma=0.99,
         lamda=0.90,
         c2=0.01,
+        kl_coeff=0.5,
+        grad_clip_value=0.5,
         writer_comment=env_name,
+        train_epochs_annealing=True,
     )
     agent.actor.summary()
 

@@ -14,15 +14,13 @@ from rockrl.tensorflow import PPOAgent
 
 def actor_model(input_shape, action_space):
     X_input = layers.Input(input_shape)
-    X = layers.Dense(512, activation="gelu")(X_input)
-    # X = layers.LeakyReLU(alpha=0.1)(X)
-    X = layers.Dense(256, activation="gelu")(X)
-    # X = layers.LeakyReLU(alpha=0.1)(X)
-    X = layers.Dense(64, activation="gelu")(X)
-    # X = layers.LeakyReLU(alpha=0.1)(X)
+    X = layers.Dense(512, activation='relu')(X_input)
+    X = layers.Dense(256, activation='relu')(X)
+    X = layers.Dense(64, activation='relu')(X)
 
     action = layers.Dense(action_space, activation="tanh")(X)
-    sigma = layers.Dense(action_space, activation='softplus')(X)
+    sigma = layers.Dense(action_space)(X)
+    sigma = layers.Dense(1, activation='sigmoid')(sigma)
     action_sigma = layers.concatenate([action, sigma])
 
     model = models.Model(inputs = X_input, outputs = action_sigma)
@@ -30,12 +28,9 @@ def actor_model(input_shape, action_space):
 
 def critic_model(input_shape):
     X_input = layers.Input(input_shape)
-    X = layers.Dense(512, activation="gelu")(X_input)
-    # X = layers.LeakyReLU(alpha=0.1)(X)
-    X = layers.Dense(256, activation="gelu")(X)
-    # X = layers.LeakyReLU(alpha=0.1)(X)
-    X = layers.Dense(64, activation="gelu")(X)
-    # X = layers.LeakyReLU(alpha=0.1)(X)
+    X = layers.Dense(512, activation="relu")(X_input)
+    X = layers.Dense(256, activation="relu")(X)
+    X = layers.Dense(64, activation="relu")(X)
 
     value = layers.Dense(1, activation=None)(X)
 
@@ -46,7 +41,7 @@ def critic_model(input_shape):
 if __name__ == "__main__":
     env_name = 'BipedalWalkerHardcore-v3'
 
-    num_envs = 48
+    num_envs = 128
     env = VectorizedEnv(env_object=gym.make, num_envs=num_envs, id=env_name)
     action_space = env.action_space.shape[0]
     input_shape = env.observation_space.shape
@@ -54,15 +49,14 @@ if __name__ == "__main__":
     agent = PPOAgent(
         actor = actor_model(input_shape, action_space),
         critic = critic_model(input_shape),
-        optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.00005),
         action_space="continuous",
         batch_size=512,
         train_epochs=10,
         gamma=0.99,
         lamda=0.90,
         c2=0.01,
-        kl_coeff=0.2,
-        shuffle=True,
+        kl_coeff=0.5,
         writer_comment=env_name,
     )
     agent.actor.summary()

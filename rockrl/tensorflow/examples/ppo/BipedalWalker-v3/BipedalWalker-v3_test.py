@@ -15,12 +15,12 @@ from rockrl.utils.memory import MemoryManager
 if __name__ == "__main__":
     env_name = 'BipedalWalker-v3'
 
-    num_envs = 48
-    env = VectorizedEnv(env_object=gym.make, num_envs=num_envs, id=env_name) # , render_mode="human")
+    num_envs = 4
+    env = VectorizedEnv(env_object=gym.make, num_envs=num_envs, id=env_name), # , render_mode="human")
     action_space = env.action_space.shape[0]
     input_shape = env.observation_space.shape
 
-    actor = load_model("runs/1696939943/BipedalWalker-v3_actor.h5", compile=False)
+    actor = load_model("runs/1697198020/BipedalWalker-v3_actor.h5", compile=False)
     actor.summary()
 
     memory = MemoryManager(num_envs=num_envs)
@@ -30,8 +30,7 @@ if __name__ == "__main__":
     while True:
 
         probs = actor.predict(states, verbose=False)
-        probs_size = int(probs.shape[-1] / 2)
-        actions, sigma = probs[:, :probs_size], probs[:, probs_size:]
+        actions, sigma = probs[:, :-1], probs[:, -1]
 
         next_states, rewards, terminateds, truncateds, infos = env.step(actions)
         memory.append(states, actions, rewards, probs, terminateds, truncateds, next_states, infos)
