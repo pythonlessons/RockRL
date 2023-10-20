@@ -16,7 +16,7 @@ if __name__ == "__main__":
     env_name = 'BipedalWalker-v3'
 
     num_envs = 4
-    env = VectorizedEnv(env_object=gym.make, num_envs=num_envs, id=env_name), # , render_mode="human")
+    env = VectorizedEnv(env_object=gym.make, num_envs=num_envs, id=env_name) # , render_mode="human")
     action_space = env.action_space.shape[0]
     input_shape = env.observation_space.shape
 
