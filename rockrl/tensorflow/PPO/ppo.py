@@ -231,8 +231,6 @@ class PPOAgent:
 
         elif self.action_space == "continuous":
             # in continuous action space, the network outputs mean and sigma should be concatenated
-            # probs_size = int(probs.shape[-1] / 2)
-            # a_probs, sigma = probs[:, :probs_size], probs[:, probs_size:]
             a_probs, sigma = probs[:, :-1], probs[:, -1]
             if not test:
                 actions = np.random.normal(a_probs, np.expand_dims(sigma, -1))
