@@ -1,4 +1,4 @@
-# BipedalWalker-v3 with PPO and OpenAI Gym (TensorFlow) example
+# BipedalWalkerHardcore-v3 with PPO and OpenAI Gym (TensorFlow) example
 This is an implementation of [Proximal Policy Optimization](https://arxiv.org/abs/1707.06347) (PPO) with OpenAI Gym, using TensorFlow. It is tested on BipedalWalkerHardcore-v3 (continuous) environment.
 
 ## Usage:
