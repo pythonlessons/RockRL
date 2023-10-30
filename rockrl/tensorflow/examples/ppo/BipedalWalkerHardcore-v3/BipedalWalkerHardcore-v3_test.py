@@ -16,13 +16,12 @@ from rockrl.utils.memory import MemoryManager
 if __name__ == "__main__":
     env_name = 'BipedalWalkerHardcore-v3'
 
-    num_envs = 64
-    env = VectorizedEnv(env_object=gym.make, num_envs=num_envs, id=env_name) # , render_mode="human")
+    num_envs = 4
+    env = VectorizedEnv(env_object=gym.make, num_envs=num_envs, id=env_name, render_mode="human")
     action_space = env.action_space.shape[0]
     input_shape = env.observation_space.shape
 
-    # actor = load_model("runs/1686313794/BipedalWalkerHardcore-v3_actor.h5", compile=False)
-    actor = load_model("runs/1697361364/BipedalWalkerHardcore-v3_actor.h5", compile=False)
+    actor = load_model("rockrl/tensorflow/examples/ppo/BipedalWalkerHardcore-v3/1697484446/BipedalWalkerHardcore-v3_actor.h5", compile=False)
     actor.summary()
 
     memory = MemoryManager(num_envs=num_envs)

@@ -19,4 +19,4 @@ Use as many threads as you can (I recommend 8 or more).
 - `LunarLander-v2_test_multiple.py` - Trained agent test with multiple threads
 
 ## This tutorial YouTube video:
-https://youtu.be/OfW78W3Vv2M
+[![LunarLander-v2 with PPO and OpenAI Gym (TensorFlow) example](https://img.youtube.com/vi/OfW78W3Vv2M/0.jpg)](https://www.youtube.com/watch?v=OfW78W3Vv2M)

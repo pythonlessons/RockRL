@@ -1,0 +1,16 @@
+action_space: continuous
+batch_size: 512
+c1: 0.5
+c2: 0.01
+epoch: 0
+gamma: 0.99
+grad_clip_value: 0.5
+kl_coeff: 0.5
+lamda: 0.9
+learning_rate: 4.999999873689376e-05
+logdir: runs/1697484446
+loss_clipping: 0.2
+shuffle: true
+train_epochs: 10
+train_epochs_annealing: true
+writer_comment: BipedalWalkerHardcore-v3
