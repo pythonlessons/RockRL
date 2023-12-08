@@ -1,5 +1,9 @@
-## [0.0.4] - 2022-10-10
+## [0.4.1] - 2023-12-08
+### Changed
+- Removed `tensorflow_probability` dependency
 
+
+## [0.4.0] - 2023-10-10
 ### Added
 - Initial RockRL package release
 - Tensorflow PPO implementation for `discrete` and `continuous` action spaces

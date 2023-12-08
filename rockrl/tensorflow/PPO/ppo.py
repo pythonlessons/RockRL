@@ -1,5 +1,5 @@
-import yaml
 import os
+import yaml
 import time
 import typing
 import numpy as np
@@ -8,7 +8,6 @@ from keras import backend as K
 
 from rockrl.utils.memory import Memory
 
-import tensorflow_probability as tfp
 
 class PPOAgent:
     """ Reinforcement Learning agent that learns using Proximal Policy Optimization. """
@@ -88,7 +87,7 @@ class PPOAgent:
             os.makedirs(self.logdir, exist_ok=True)
             self.writer = tf.summary.create_file_writer(self.logdir, filename_suffix=self.writer_comment)
 
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+        tf.get_logger().setLevel('ERROR')
         self.save_config()
 
     def save_config(self):
@@ -127,7 +126,6 @@ class PPOAgent:
         """ Mean Squared Error loss for critic"""
         y_pred = tf.squeeze(y_pred)
         target = tf.squeeze(target)
-        # loss = K.mean((y_pred - target) ** 2)
 
         v_loss_unclipped = (y_pred - target) ** 2
         v_clipped = target + K.clip(
@@ -160,30 +158,21 @@ class PPOAgent:
         """
         actions = tf.cast(actions, tf.float32)
         # Get probs size from the last dimension of probs, because in actor model, we concatenate mu and sigma
-        # probs_size = tf.cast(probs.shape[-1] / 2, tf.int32)
-        # mu, sigma = probs[:, :probs_size], probs[:, probs_size:]
         mu, sigma = probs[:, :-1], probs[:, -1]
         sigma = tf.expand_dims(sigma, -1)
 
-        dist = tfp.distributions.Normal(mu, sigma)
-        log_prob = dist.log_prob(actions)
+        # compute the exponent of the gaussian dist
+        exponent = -0.5 * K.square(actions - mu) / K.square(sigma)
+        # compute log coefficient
+        log_coeff = -0.5 * K.log(2.0 * np.pi * K.square(sigma))
+        # compute log probability
+        log_prob = log_coeff + exponent
         log_prob = tf.reduce_sum(log_prob, axis=1)
-        entropy = dist.entropy()
+
+        # compute entropy
+        entropy_coeff = 0.5 * K.log(2.0 * np.pi * np.e * K.square(sigma))
+        entropy = tf.reduce_sum(entropy_coeff, axis=1)
         entropy = K.mean(entropy)
-
-        # # compute the exponent of the gaussian dist
-        # exponent = -0.5 * K.square(actions - mu) / K.square(sigma)
-        # # compute log coefficient
-        # log_coeff = -0.5 * K.log(2.0 * np.pi * K.square(sigma))
-        # # compute log probability
-        # log_prob_ = log_coeff + exponent
-        # log_prob_ = tf.reduce_sum(log_prob_, axis=1)
-
-        # # compute entropy
-        # entropy_coeff = 0.5 * K.log(2.0 * np.pi * np.e * K.square(sigma))
-        # entropy = tf.reduce_sum(entropy_coeff, axis=1)
-        # entropy = -K.mean(entropy)
-        # entropy = K.mean(entropy)
 
         return log_prob, entropy, sigma
 

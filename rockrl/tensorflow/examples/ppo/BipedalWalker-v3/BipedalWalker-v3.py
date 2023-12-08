@@ -52,7 +52,7 @@ if __name__ == "__main__":
     agent = PPOAgent(
         actor = actor_model(input_shape, action_space),
         critic = critic_model(input_shape),
-        optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.002),
         action_space="continuous",
         batch_size=512,
         train_epochs=10,
