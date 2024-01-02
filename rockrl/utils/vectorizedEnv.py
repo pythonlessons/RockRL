@@ -74,7 +74,7 @@ class VectorizedEnv:
             for conn in self.conns:
                 conn[0].send('reset')
             states, infos = zip(*[conn[0].recv() for conn in self.conns])
-            return np.array(states), infos
+            return np.array(states), list(infos)
         else:
             self.conns[index][0].send('reset')
             state, info = self.conns[index][0].recv()
@@ -87,7 +87,7 @@ class VectorizedEnv:
         results = [conn[0].recv() for conn in self.conns]
         next_states, rewards, terminateds, truncateds, infos = zip(*results)
         
-        return np.array(next_states), np.array(rewards), np.array(terminateds), np.array(truncateds), infos
+        return np.array(next_states), np.array(rewards), np.array(terminateds), np.array(truncateds), list(infos)
     
     def render(self, index=None):
         if index is None:

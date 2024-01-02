@@ -1,3 +1,8 @@
+## [0.4.2] - 2024-01-02
+### Changed
+- Changed `rockrl.utils.VectorizedEnv` to return info dictionaries in list instead of tuples
+
+
 ## [0.4.1] - 2023-12-08
 ### Changed
 - Removed `tensorflow_probability` dependency
