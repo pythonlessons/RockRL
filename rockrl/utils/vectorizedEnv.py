@@ -58,11 +58,11 @@ def run_env(conn, env_object, kwargs):
 
 class VectorizedEnv:
     def __init__(self, env_object, num_envs: int=2, **kwargs):
-        env = env_object(**kwargs)
-        self.observation_space = env.observation_space
-        self.action_space = env.action_space
-        self._max_episode_steps = env._max_episode_steps
-        env.close()
+        self.env = env_object(**kwargs)
+        self.observation_space = self.env.observation_space
+        self.action_space = self.env.action_space
+        self._max_episode_steps = self.env._max_episode_steps
+        self.env.close()
 
         self.conns = [mp.Pipe() for _ in range(num_envs)]
         self.envs = [mp.Process(target=run_env, args=(conn, env_object, kwargs)) for conn in self.conns]

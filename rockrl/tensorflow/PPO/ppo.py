@@ -8,6 +8,35 @@ from keras import backend as K
 
 from rockrl.utils.memory import Memory
 
+import threading
+import queue
+
+class TensorBoardLogger:
+    def __init__(self, writer, epoch=0):
+        self.writer = writer
+        self.epoch = epoch
+        self.log_queue = queue.Queue()
+        self.stop_event = threading.Event()
+        self.worker_thread = threading.Thread(target=self._log_worker)
+        self.worker_thread.start()
+
+    def log_to_queue(self, data, epoch):
+        self.epoch = epoch
+        self.log_queue.put(data)
+
+    def _log_worker(self):
+        while not self.stop_event.is_set():
+            data = self.log_queue.get()
+            if self.writer:
+                with self.writer.as_default():
+                    for key, value in data.items():
+                        tf.summary.scalar(key, value, step=self.epoch)
+                    self.writer.flush()
+
+    def stop_worker(self):
+        self.stop_event.set()
+        self.worker_thread.join()
+
 
 class PPOAgent:
     """ Reinforcement Learning agent that learns using Proximal Policy Optimization. """
@@ -81,6 +110,7 @@ class PPOAgent:
         # Tensorboard logging
         self.logdir = logdir
         self.writer = writer
+        self.tensorBoardLogger = TensorBoardLogger(self.writer, self.epoch)
         self.writer_comment = writer_comment
 
         if self.logdir and not writer:
@@ -100,8 +130,13 @@ class PPOAgent:
             config[key] = value
 
         if self.logdir:
-            with open(self.logdir + "/config.yaml", "w") as f:
-                yaml.dump(config, f)
+            config_file = self.logdir + "/config.yaml"
+            if not os.path.exists(config_file):
+                try:
+                    with open(config_file, "w") as f:
+                        yaml.dump(config, f)
+                except:
+                    print("Failed to save config to file")
 
         # save config to tensorboard, for easy viewing
         if self.writer:
@@ -295,13 +330,9 @@ class PPOAgent:
             if verbose: 
                 print(f"Reduced learning rate to {self.learning_rate}")
 
-    def log_to_writer(self, data: dict):
-        if self.writer:
-            with self.writer.as_default():
-                for key, value in data.items():
-                    tf.summary.scalar(key, value, step = self.epoch)
-
-                self.writer.flush()
+    def log_to_writer(self, data: dict, epoch: int = None):
+        epoch = epoch or self.epoch
+        self.tensorBoardLogger.log_to_queue(data, epoch)
 
     def custom_logger(self, history: dict) -> dict:
         for key, value in history.items():
@@ -366,7 +397,6 @@ class PPOAgent:
             actions = tf.gather(actions, indices)
             target = tf.gather(target, indices)
 
-        # with tf.GradientTape() as tape1, tf.GradientTape() as tape2:
         with tf.GradientTape() as tape:
             probs = self.actor(states, training=True)  # Forward pass
             values = self.critic(states, training=True)
