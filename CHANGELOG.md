@@ -1,5 +1,9 @@
 ## [0.4.3] - 2024-01-05
 ### Changed
+- Moded `tensorBoardLogger` in `rockrl.tensorflow.ppo` few lines bellow
+
+## [0.4.3] - 2024-01-05
+### Changed
 - Updated `rockrl.tensorflow.ppo` to use threading while logging, to save time
 
 ## [0.4.2] - 2024-01-02
