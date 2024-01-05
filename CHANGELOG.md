@@ -1,3 +1,7 @@
+## [0.4.3] - 2024-01-05
+### Changed
+- Updated `rockrl.tensorflow.ppo` to use threading while logging, to save time
+
 ## [0.4.2] - 2024-01-02
 ### Changed
 - Changed `rockrl.utils.VectorizedEnv` to return info dictionaries in list instead of tuples
