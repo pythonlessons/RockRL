@@ -110,13 +110,13 @@ class PPOAgent:
         # Tensorboard logging
         self.logdir = logdir
         self.writer = writer
-        self.tensorBoardLogger = TensorBoardLogger(self.writer, self.epoch)
         self.writer_comment = writer_comment
 
         if self.logdir and not writer:
             os.makedirs(self.logdir, exist_ok=True)
             self.writer = tf.summary.create_file_writer(self.logdir, filename_suffix=self.writer_comment)
 
+        self.tensorBoardLogger = TensorBoardLogger(self.writer, self.epoch)
         tf.get_logger().setLevel('ERROR')
         self.save_config()
 
