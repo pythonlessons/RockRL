@@ -1,4 +1,11 @@
-## [0.4.3] - 2024-01-05
+## [0.4.5] - 2024-01-17
+### Changed
+- Changed `rockrl.tensorflow.ppo` `act` function to use training mode while training and evaluation mode while evaluating
+
+### Added
+- Added `close()` method to `rockrl.tensorflow.ppo` to close `tensorBoardLogger` after training
+
+## [0.4.4] - 2024-01-05
 ### Changed
 - Moded `tensorBoardLogger` in `rockrl.tensorflow.ppo` few lines bellow
 
