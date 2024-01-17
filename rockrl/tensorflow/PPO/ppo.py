@@ -26,7 +26,11 @@ class TensorBoardLogger:
 
     def _log_worker(self):
         while not self.stop_event.is_set():
-            data = self.log_queue.get()
+            try:
+                data = self.log_queue.get(timeout=1)  # Use timeout to make it non-blocking
+            except queue.Empty:
+                continue
+            
             if self.writer:
                 with self.writer.as_default():
                     for key, value in data.items():
@@ -236,7 +240,7 @@ class PPOAgent:
 
         return loss, entropy, approx_kl_divergence, sigma
 
-    def act(self, state: np.ndarray, test: bool = False) -> typing.Tuple[np.ndarray, np.ndarray]:
+    def act(self, state: np.ndarray, training: bool = True) -> typing.Tuple[np.ndarray, np.ndarray]:
         if not isinstance(state, np.ndarray):
             state = np.array(state)
 
@@ -245,10 +249,10 @@ class PPOAgent:
             state = np.expand_dims(state, axis=0)
 
         # Use the network to predict the next action to take, using the model
-        probs = self.actor(state, training=False).numpy()
+        probs = self.actor(state, training=training).numpy()
         if self.action_space == "discrete":
             # in discrete action space, the network outputs a probability distribution over the actions
-            if not test:
+            if training:
                 actions = np.array([np.random.choice(prob.shape[0], p=prob) for prob in probs])
             else:
                 actions = np.argmax(probs, axis=1)
@@ -256,7 +260,7 @@ class PPOAgent:
         elif self.action_space == "continuous":
             # in continuous action space, the network outputs mean and sigma should be concatenated
             a_probs, sigma = probs[:, :-1], probs[:, -1]
-            if not test:
+            if training:
                 actions = np.random.normal(a_probs, np.expand_dims(sigma, -1))
             else:
                 actions = a_probs
@@ -450,3 +454,7 @@ class PPOAgent:
             self.actor.summary()
         if critic:
             self.critic.summary()
+
+    def close(self):
+        self.tensorBoardLogger.stop_worker()
+        self.writer.close()
