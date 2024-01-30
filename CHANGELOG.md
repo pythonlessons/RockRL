@@ -1,3 +1,7 @@
+## [0.4.6] - 2024-01-30
+### Added
+- Added `ema_ratio` parameter to `rockrl.tensorflow.ppo` to control the exponential moving average ratio of the old and new networks
+
 ## [0.4.5] - 2024-01-17
 ### Changed
 - Changed `rockrl.tensorflow.ppo` `act` function to use training mode while training and evaluation mode while evaluating
