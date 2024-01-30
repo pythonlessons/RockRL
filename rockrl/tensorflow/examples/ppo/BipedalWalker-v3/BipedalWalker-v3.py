@@ -52,7 +52,7 @@ if __name__ == "__main__":
     agent = PPOAgent(
         actor = actor_model(input_shape, action_space),
         critic = critic_model(input_shape),
-        optimizer=tf.keras.optimizers.Adam(learning_rate=0.002),
+        optimizer = tf.keras.optimizers.Adam(learning_rate=0.0005),
         action_space="continuous",
         batch_size=512,
         train_epochs=10,
@@ -79,7 +79,7 @@ if __name__ == "__main__":
 
         for index in memory.done_indices():
             env_memory = memory[index]
-            agent.train(env_memory)
+            history = agent.train(env_memory)
             states[index], _ = env.reset(index)
 
             mean = meanAverage(env_memory.score)
@@ -87,6 +87,9 @@ if __name__ == "__main__":
             if meanAverage.is_best(agent.epoch):
                 # save model
                 agent.save_models(env_name)
+
+            if history['kl_div'] > 0.3 and agent.epoch > 1000:
+                agent.reduce_learning_rate(0.995, verbose=False)
 
             print(agent.epoch, env_memory.score, mean, len(env_memory), meanAverage.best_mean_score, meanAverage.best_mean_score_episode)
 

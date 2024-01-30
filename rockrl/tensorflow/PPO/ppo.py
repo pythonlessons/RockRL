@@ -65,6 +65,7 @@ class PPOAgent:
         shuffle: bool=True,
         kl_coeff: float=0.2,
         grad_clip_value: float=0.5,
+        ema_ratio: float=None,
         ):
         """ Reinforcement Learning agent that learns using Proximal Policy Optimization.
 
@@ -89,6 +90,7 @@ class PPOAgent:
             shuffle (bool): Whether to shuffle the data. Defaults to True.
             kl_coeff (float): KL divergence coefficient, to prevent the policy from changing too much. Defaults to 0.2.
             grad_clip_value (float): Value to clip gradients to prevent exploding gradients. Defaults to 0.5.
+            ema_ratio (float): Exponential Moving Average ratio. Defaults to None.
         """
         self.actor = actor
         self.critic = critic
@@ -105,9 +107,17 @@ class PPOAgent:
         self.shuffle = shuffle
         self.kl_coeff = kl_coeff
         self.grad_clip_value = grad_clip_value
+        self.ema_ratio = ema_ratio
 
         self.optimizer = optimizer
         self.learning_rate = float(self.optimizer.lr.numpy())
+
+        if self.ema_ratio is not None:
+            self.use_ema = True
+            self.actor_ema = tf.train.ExponentialMovingAverage(decay=self.ema_ratio)
+            self.critic_ema = tf.train.ExponentialMovingAverage(decay=self.ema_ratio)
+            self.actor_ema.apply(self.actor.trainable_variables)
+            self.critic_ema.apply(self.critic.trainable_variables)
 
         assert self.action_space in ["discrete", "continuous"], "action_space must be either 'discrete' or 'continuous'"
 
@@ -249,7 +259,7 @@ class PPOAgent:
             state = np.expand_dims(state, axis=0)
 
         # Use the network to predict the next action to take, using the model
-        probs = self.actor(state, training=training).numpy()
+        probs = self.actor(state, training=False).numpy()
         if self.action_space == "discrete":
             # in discrete action space, the network outputs a probability distribution over the actions
             if training:
@@ -333,6 +343,15 @@ class PPOAgent:
             self.optimizer.lr = self.learning_rate
             if verbose: 
                 print(f"Reduced learning rate to {self.learning_rate}")
+    
+    def update_emas(self):
+        if self.ema_ratio is not None:
+            self.actor_ema.apply(self.actor.trainable_variables)
+            self.critic_ema.apply(self.critic.trainable_variables)
+            for var in self.actor.trainable_variables:
+                var.assign(self.actor_ema.average(var))
+            for var in self.critic.trainable_variables:
+                var.assign(self.critic_ema.average(var))
 
     def log_to_writer(self, data: dict, epoch: int = None):
         epoch = epoch or self.epoch
@@ -418,10 +437,27 @@ class PPOAgent:
             kl_error = approx_kl_div * self.kl_coeff if approx_kl_div >= self.kl_coeff else 0.0
             loss = actor_loss + entropy_loss + critic_loss + kl_error
             grads = tape.gradient(loss, self.actor.trainable_variables + self.critic.trainable_variables)
+            # actor_grads = grads[:len(self.actor.trainable_variables)]
+            # critic_grads = grads[len(self.actor.trainable_variables):]
+            # actor_grads = self.clip_gradients(actor_grads, self.grad_clip_value)
+            # critic_grads = self.clip_gradients(critic_grads, self.grad_clip_value)
+            # self.optimizer.apply_gradients(zip(actor_grads+critic_grads, self.actor.trainable_variables + self.critic.trainable_variables))
             grads = self.clip_gradients(grads, self.grad_clip_value)
             self.optimizer.apply_gradients(zip(grads, self.actor.trainable_variables + self.critic.trainable_variables))
 
-        results = {"loss": loss, "a_loss": actor_loss, "c_loss": critic_loss, "entropy": entropy, "kl_div": approx_kl_div, "sigma": sigma}
+        results = {
+            "loss": loss, 
+            "a_loss": actor_loss, 
+            "c_loss": critic_loss, 
+            "entropy": entropy, 
+            "kl_div": approx_kl_div, 
+            "sigma": sigma,
+            "grads_norm": tf.linalg.global_norm(grads),
+            # "actor_gradients_norm": tf.linalg.global_norm(actor_grads),
+            # "critic_gradients_norm": tf.linalg.global_norm(critic_grads),
+        }
+
+        self.update_emas()
 
         return results
 
